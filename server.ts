@@ -343,47 +343,46 @@ function getFallbackSummative(grade: any, materi: any) {
   const g = grade || '1';
   const m = materi || 'Penilaian Sumatif PJOK';
   return {
-    soalList: [
+    judulUjian: `NASKAH SOAL SUMATIF PJOK KELAS ${g} SD`,
+    kop: {
+      dinasPendidikan: 'DINAS PENDIDIKAN KABUPATEN / KOTA',
+      namaSekolah: 'SD NEGERI UTAMA',
+      mataPelajaran: 'PJOK',
+      kelas: g,
+      semester: '1 (Ganjil)',
+      tahunPelajaran: '2024/2025',
+      alokasiWaktu: '60 Menit'
+    },
+    questions: [
       {
         id: 'sum-1',
-        nomor: 1,
-        kisiKisi: `Disajikan narasi gerakan ${m}, siswa dapat mengidentifikasi jenis gerakan dengan tepat.`,
-        pertanyaan: `Manakah dari pilihan berikut yang merupakan contoh sikap hidup sehat sehari-hari?`,
-        pilihan: {
-          A: 'Mencuci tangan sebelum makan',
-          B: 'Tidur larut malam setiap hari',
-          C: 'Jarang berolahraga',
-          D: 'Makan sembarangan di jalan'
-        },
-        kunci: 'A',
-        pembahasan: 'Mencuci tangan sebelum makan merupakan salah satu penerapan pola hidup bersih dan sehat.',
-        bobot: 10
+        questionText: `Manakah di bawah ini yang merupakan contoh gerakan lokomotor dalam olahraga ${m}?`,
+        options: ['A. Berlari menuju garis finis', 'B. Memutar persendian lengan', 'C. Mendorong dinding', 'D. Mengayunkan tangan'],
+        correctAnswer: 'A',
+        explanation: 'Berlari menyebabkan terjadinya perpindahan posisi tubuh dari titik A ke titik B.',
+        kisiKisi: 'Disajikan jenis gerakan, siswa dapat mengidentifikasi gerakan lokomotor.',
+        indikator: 'Mengidentifikasi gerakan berpindah tempat',
+        levelKognitif: 'C2 / Pemahaman'
       },
       {
         id: 'sum-2',
-        nomor: 2,
-        kisiKisi: 'Siswa dapat menentukan manfaat melakukan pemanasan sebelum kegiatan fisik.',
-        pertanyaan: 'Manfaat utama dari melakukan pemanasan sebelum olahraga adalah...',
-        pilihan: {
-          A: 'Membuat tubuh menjadi lelah',
-          B: 'Mencegah terjadinya cedera otot',
-          C: 'Mempercepat datangnya rasa haus',
-          D: 'Mengurangi berat badan dengan cepat'
-        },
-        kunci: 'B',
-        pembahasan: 'Pemanasan menaikkan suhu tubuh dan kelenturan otot agar siap bergerak tanpa cedera.',
-        bobot: 10
-      }
-    ],
-    kartuSoalList: [
+        questionText: `Sikap tubuh yang benar saat melakukan gerakan lompat mendarat dengan dua kaki adalah...?`,
+        options: ['A. Kaki kaku lurus', 'B. Lutut sedikit mengeper/ditekuk', 'C. Badan miring ke samping', 'D. Kepala menunduk tajam'],
+        correctAnswer: 'B',
+        explanation: 'Mengeperkan lutut saat mendarat meredam benturan dan menjaga keseimbangan tubuh.',
+        kisiKisi: 'Disajikan teknik mendarat, siswa menentukan posisi tubuh yang aman.',
+        indikator: 'Menjelaskan posisi mendarat yang aman',
+        levelKognitif: 'C3 / Penerapan'
+      },
       {
-        nomorSoal: 1,
-        mataPelajaran: 'PJOK',
-        kelas: g,
-        materi: m,
-        indikatorSoal: 'Siswa dapat mengidentifikasi kebiasaan hidup bersih dan sehat.',
-        bentukSoal: 'Pilihan Ganda',
-        kunciJawaban: 'A'
+        id: 'sum-3',
+        questionText: 'Tujuan utama melakukan pendinginan (cooling down) setelah melakukan aktivitas fisik adalah...?',
+        options: ['A. Mengembalikan denyut jantung ke kondisi normal', 'B. Menambah beban kerja otot', 'C. Mempercepat rasa lelah', 'D. Meningkatkan suhu tubuh'],
+        correctAnswer: 'A',
+        explanation: 'Pendinginan bertahap menurunkan denyut nadi dan membantu pemulihan otot.',
+        kisiKisi: 'Disajikan manfaat pendinginan, siswa menyebutkan tujuan utamanya.',
+        indikator: 'Menjelaskan fungsi pendinginan',
+        levelKognitif: 'C2 / Pemahaman'
       }
     ]
   };
@@ -402,251 +401,418 @@ function getFallbackKKO(tpText: any) {
   };
 }
 
-function getFallbackDailyTest(grade: any, materi: any) {
+function getFallbackDailyTest(grade: any, materi: any, tipe?: any) {
   const g = grade || '1';
   const m = materi || 'Ulangan Harian PJOK';
+  const t = tipe === 'praktik' ? 'praktik' : 'tulis';
   return {
-    judulInstrumen: `Naskah Ulangan Harian PJOK Kelas ${g} SD - ${m}`,
-    kategori: 'Ulangan Harian / Asesmen Formatif',
-    kisiKisiText: `Kisi-kisi menguji pemahaman konseptual dan praktik materi ${m} pada jenjang SD Kelas ${g}.`,
-    soalPilihanGanda: [
+    title: `INSTRUMEN ULANGAN HARIAN PJOK KELAS ${g}`,
+    grade: g,
+    materi: m,
+    tujuanPembelajaran: `Siswa dapat memahami dan mempraktikkan materi ${m} dengan aman dan penuh percaya diri.`,
+    tipeUlangan: t,
+    questions: [
       {
-        nomor: 1,
-        soal: `Gerakan berjalan dan berlari merupakan kelompok gerak dasar...?`,
-        pilihan: ['A. Lokomotor', 'B. Non-lokomotor', 'C. Manipulatif', 'D. Pasif'],
-        kunci: 'A'
+        id: 'q1',
+        questionText: `Gerakan berpindah tempat dari satu posisi ke posisi lain disebut gerak...?`,
+        options: ['A. Lokomotor', 'B. Non-lokomotor', 'C. Manipulatif', 'D. Pasif'],
+        correctAnswer: 'A',
+        explanation: 'Gerak lokomotor ditandai dengan adanya perpindahan seluruh posisi tubuh.'
       },
       {
-        nomor: 2,
-        soal: `Anggota tubuh yang digunakan untuk melompat pada olahraga atletik adalah...?`,
-        pilihan: ['A. Tangan', 'B. Kaki', 'C. Kepala', 'D. Dahi'],
-        kunci: 'B'
+        id: 'q2',
+        questionText: `Aktivitas yang wajib dilakukan sebelum melakukan olahraga inti adalah...?`,
+        options: ['A. Pemanasan', 'B. Makan berat', 'C. Tidur gantung', 'D. Pendinginan'],
+        correctAnswer: 'A',
+        explanation: 'Pemanasan mempersiapkan fleksibilitas otot dan organ sirkulasi darah.'
       }
     ],
-    soalUraian: [
+    essayQuestions: [
       {
-        nomor: 1,
-        soal: `Sebutkan 2 contoh manfaat olahraga secara teratur bagi kesehatan tubuh anak!`,
-        kunciJawaban: 'Membuat tubuh sehat dan bugar, serta menguatkan otot dan tulang.'
+        id: 'e1',
+        questionText: `Sebutkan 3 contoh gerakan lokomotor yang sering kamu lakukan di sekolah!`,
+        keyAnswer: 'Berjalan, berlari, dan melompat.',
+        scoreMax: 10
       }
     ],
-    rubrikPraktik: `Rubrik Praktik: Nilai 90-100 jika gerakan dilakukan dengan teknik sempurna. Nilai 75-89 jika cukup sempurna. Nilai <75 jika perlu bimbingan ulang.`
+    taskInstructions: [
+      `1. Lakukan pemanasan mandiri atau bersama kelompok selama 5 menit.`,
+      `2. Praktikkan gerakan ${m} melintasi lintasan sepanjang 10 meter.`,
+      `3. Utamakan keselamatan fisik dan koordinasi tubuh yang seimbang.`
+    ],
+    rubricCriteria: [
+      {
+        id: 'r1',
+        aspect: 'Sikap Awalan & Posisi Tubuh',
+        score4: 'Posisi berdiri sangat siap, fokus mata tepat ke depan, keseimbangan sempurna.',
+        score3: 'Posisi berdiri cukup siap, fokus mata ke depan, keseimbangan baik.',
+        score2: 'Posisi kurang siap, posisi kepala menunduk, sesekali oleng.',
+        score1: 'Posisi tidak siap dan membutuhkan arahan ulang dari guru.'
+      },
+      {
+        id: 'r2',
+        aspect: 'Pelaksanaan Gerakan Inti',
+        score4: 'Rangkaian gerakan sangat mulus, ritme konsisten, tanpa kesalahan pola.',
+        score3: 'Rangkaian gerakan cukup mulus dengan sedikit penyesuaian ritme.',
+        score2: 'Gerakan kaku, terjadi penyesuaian posisi berkali-kali.',
+        score1: 'Gerakan tidak teratur dan belum menguasai pola dasar.'
+      }
+    ],
+    scoringFormula: 'Nilai Akhir = (Total Skor Perolehan / Total Skor Maksimal) x 100',
+    gradingGuide: 'Predikat: 86-100 (Sangat Baik), 71-85 (Baik), 56-70 (Cukup), <56 (Perlu Bimbingan)'
   };
 }
 
-function getFallbackATP(grade: any, materi: any) {
-  const g = grade || '1';
-  const m = materi || 'Pola Gerak Dasar';
-  const numGrade = parseInt(g) || 1;
+function getFallbackATP(phase?: any, element?: any) {
+  const p = phase || 'Fase A (Kelas 1 - 2)';
+  const e = element || 'Keterampilan Gerak';
   return {
-    capaianPembelajaran: `Pada akhir Fase, peserta didik mampu menunjukkan kemampuan dalam mempraktikkan dan menganalisis ${m} secara aman dan bertanggung jawab.`,
-    fase: `Fase ${numGrade <= 2 ? 'A' : numGrade <= 4 ? 'B' : 'C'}`,
-    alurTujuanList: [
+    alurTujuanPembelajaran: [
+      `1.1 Peserta didik mampu menirukan variasi pola gerak dasar lokomotor (jalan, lari, melompat) dengan koordinasi tubuh yang seimbang pada ${p}.`,
+      `1.2 Peserta didik mampu memperagakan kombinasi gerak dasar non-lokomotor (menekuk, mengayun, memutar) secara mandiri dan aman.`,
+      `1.3 Peserta didik mampu melatih koordinasi gerak dasar manipulatif (melempar, menangkap, menendang) dalam kelompok kecil.`,
+      `1.4 Peserta didik mampu mengarahkan gerakan sesuai petunjuk keselamatan dan menerapkan nilai-nilai sportivitas.`
+    ],
+    kriteriaKetercapaian: [
       {
-        kode: `TP-${g}.1`,
-        tujuanPembelajaran: `Peserta didik mampu memahami konsep variasi ${m} sesuai potensi diri.`,
-        indikatorKetercapaian: `Menjelaskan urutan dan aturan keselamatan dalam materi ${m}.`,
-        alokasiJp: 6,
-        materiPokok: m,
-        kataKunci: 'Lokomotor, Keseimbangan, Kebugaran'
+        kriteria: 'Penguasaan Pola Gerak Dasar Lokomotor',
+        baruBerkembang: 'Belum stabil, posisi kaki dan koordinasi tangan belum seirama.',
+        layak: 'Mampu melakukan gerakan jalan dan lari dengan posisi tubuh seimbang.',
+        mahir: 'Mampu melakukan kombinasi jalan, lari, dan melompat secara mulus tanpa kehilangan keseimbangan.'
       },
       {
-        kode: `TP-${g}.2`,
-        tujuanPembelajaran: `Peserta didik mampu mempraktikkan koordinasi ${m} dalam bentuk permainan.`,
-        indikatorKetercapaian: `Melakukan praktek gerak dengan tingkat kecermatan yang baik.`,
-        alokasiJp: 6,
-        materiPokok: `${m} Lanjutan`,
-        kataKunci: 'Koordinasi, Agilitas, Kerja sama'
+        kriteria: 'Kepatuhan Keselamatan & Sportivitas',
+        baruBerkembang: 'Membutuhkan teguran dan pendampingan langsung dari guru.',
+        layak: 'Mampu mematuhi instruksi keselamatan dan bekerja sama cukup baik.',
+        mahir: 'Menjadi teladan keselamatan dan aktif membantu serta menyemangati teman sekelompok.'
       }
     ],
-    saranPendekatan: 'Gunakan pendekatan bermain (play-based learning) dan diferensiasi tingkat kesulitan sesuai motorik siswa.'
+    metodePembelajaran: 'Pendekatan Saintifik, Game-Based Learning (Permainan Edukatif Berkesadaran), dan Unjuk Kerja Lapangan.'
   };
 }
 
-function getFallbackCPTP(fase: any, elemen: any) {
-  const f = fase || 'Fase A (Kelas 1-2)';
+function getFallbackCPTP(fase?: any, elemen?: any) {
+  const f = fase || 'Fase A (Kelas 1 - 2)';
   const e = elemen || 'Keterampilan Gerak';
   return {
     fase: f,
+    kelas: 'Kelas 1 - 2',
     elemen: e,
-    cpAsli: `Peserta didik menunjukkan kemampuan dalam menirukan dan mempraktikkan variasi pola gerak dasar pada elemen ${e}.`,
-    tujuanPembelajaranList: [
+    cpAsli: `Pada akhir ${f}, peserta didik mampu menirukan dan mempraktikkan variasi pola gerak dasar pada elemen ${e} secara aman dan disiplin.`,
+    materiSpesifik: 'Pola Gerak Dasar Lokomotor, Non-Lokomotor, dan Manipulatif',
+    analisisDekonstruksi: {
+      kompetensiUtama: ['Menirukan', 'Mempraktikkan', 'Mengidentifikasi', 'Menerapkan'],
+      lingkupMateriUtama: ['Variasi Gerak Lokomotor', 'Variasi Gerak Non-Lokomotor', 'Variasi Gerak Manipulatif'],
+      variasiKarakteristikSiswa: 'Mempertimbangkan perkembangan kognitif dan motorik kasar anak usia SD awal.'
+    },
+    daftarTp: [
       {
-        kode: 'TP.1',
-        tpText: `Memahami dan memperagakan variasi pola gerak dasar lokomotor sesuai konsep tubuh.`,
-        materiInti: 'Pola Gerak Dasar Lokomotor',
-        alokasiJp: 8,
-        kompetensiSpesifik: 'Menjelaskan dan menirukan gerak jalan, lari, dan lompat.'
+        kodeTp: 'TP-A.1',
+        rumusanTp: 'Peserta didik mampu menjelaskan dan menirukan prosedur variasi gerak dasar lokomotor (jalan, lari, melompat) dengan benar.',
+        kompetensiKko: 'Menjelaskan & Menirukan (C2 / P2)',
+        lingkupMateri: 'Variasi Gerak Dasar Lokomotor',
+        indikatorKetercapaian: [
+          'Siswa dapat menyebutkan perbedaan jalan dan lari.',
+          'Siswa dapat mempraktikkan gerak jalan lurus dan berbelok-belok.',
+          'Siswa dapat melakukan lompatan dengan tumpuan dua kaki.'
+        ],
+        profilPancasila: 'Mandiri, Gotong Royong, Bernalar Kritis',
+        targetKelasSemester: 'Kelas 1 / Semester 1',
+        alokasiWaktu: '8 JP (4 Pertemuan)',
+        rekomendasiAsesmen: 'Asesmen Formatif Unjuk Kerja Lapangan & Pengamatan Rubrik'
       },
       {
-        kode: 'TP.2',
-        tpText: `Memahami dan memperagakan variasi pola gerak dasar non-lokomotor secara tepat.`,
-        materiInti: 'Pola Gerak Dasar Non-Lokomotor',
-        alokasiJp: 8,
-        kompetensiSpesifik: 'Menjelaskan dan menirukan gerak menekuk, mengayun, dan memutar.'
+        kodeTp: 'TP-A.2',
+        rumusanTp: 'Peserta didik mampu mempraktikkan kombinasi gerak dasar non-lokomotor (menekuk, memutar, mengayun) secara aman.',
+        kompetensiKko: 'Mempraktikkan (P3)',
+        lingkupMateri: 'Variasi Gerak Dasar Non-Lokomotor',
+        indikatorKetercapaian: [
+          'Siswa dapat melakukan gerakan mengayun lengan tanpa berpindah tempat.',
+          'Siswa dapat membungkukkan badan menyentuh ujung kaki.'
+        ],
+        profilPancasila: 'Mandiri, Kreatif',
+        targetKelasSemester: 'Kelas 1 / Semester 1',
+        alokasiWaktu: '8 JP (4 Pertemuan)',
+        rekomendasiAsesmen: 'Unjuk Kerja & Observasi Sikap'
       }
     ],
-    pendekatanPembelajaran: 'Pendekatan Saintifik dan Modifikasi Game Edukasi',
-    catatanBimbinganGuru: 'Dampingi siswa yang belum lancar melakukan koordinasi keseimbangan.'
+    rekomendasiPendekatan: 'Pendekatan Bermain (Play-Based Learning) dan Modifikasi Alat Sederhana',
+    catatanPendidik: 'Dampingi siswa secara individual pada gerakan yang membutuhkan keseimbangan ekstra.'
   };
 }
 
-function getFallbackKKTP(grade: any, materi: any, mapel: any) {
+function getFallbackKKTP(grade?: any, materi?: any, mapel?: any) {
   const g = grade || '1';
-  const m = materi || 'Gerak Dasar';
+  const m = materi || 'Variasi Gerak Dasar Lokomotor';
   const mp = mapel || 'PJOK';
   return {
-    materi: m,
-    mapel: mp,
-    grade: g,
-    intervalList: [
+    identitas: {
+      satuanPendidikan: 'SD NEGERI UTAMA',
+      mataPelajaran: mp,
+      kelas: g,
+      fase: parseInt(g) <= 2 ? 'A' : parseInt(g) <= 4 ? 'B' : 'C',
+      semester: '1',
+      tahunPelajaran: '2024/2025'
+    },
+    bab: 'Bab 1',
+    materiPokok: m,
+    deskripsiCp: `Peserta didik mampu mempraktikkan variasi gerak dasar ${m} secara mandiri dan aman.`,
+    tujuanPembelajaran: `Siswa dapat memperagakan variasi gerak dasar ${m} dengan koordinasi tepat.`,
+    kktpRows: [
       {
-        rentang: '0 - 60 (Perlu Bimbingan)',
-        kriteria: 'Belum Mencapai KKTP',
-        deskripsiPerforma: 'Belum mampu melakukan gerakan dasar dengan benar dan membutuhkan intervensi penuh.'
+        no: '1',
+        indikatorTp: `Keseimbangan dan Postur Tubuh saat melakukan ${m}`,
+        interval0_60: 'Belum mampu menjaga keseimbangan tubuh (Perlu Bimbingan)',
+        interval61_75: 'Mampu menjaga keseimbangan dengan sedikit penyesuaian (Cukup)',
+        interval76_85: 'Posisi tubuh seimbang dan postur tegak stabil (Baik)',
+        interval86_100: 'Sangat stabil, gerakan santai dan penuh rasa percaya diri (Sangat Baik)'
       },
       {
-        rentang: '61 - 74 (Cukup)',
-        kriteria: 'Mencapai KKTP dengan Catatan',
-        deskripsiPerforma: 'Mampu melakukan gerakan dasar namun koordinasi masih perlu latihan rutin.'
-      },
-      {
-        rentang: '75 - 89 (Baik)',
-        kriteria: 'Mencapai KKTP',
-        deskripsiPerforma: 'Mampu melakukan seluruh rangkaian gerakan dengan benar dan mandiri.'
-      },
-      {
-        rentang: '90 - 100 (Sangat Baik)',
-        kriteria: 'Melampaui KKTP',
-        deskripsiPerforma: 'Mampu melakukan gerakan dengan teknik sempurna serta membantu teman sekelas.'
+        no: '2',
+        indikatorTp: `Akurasi dan Kelancaran Rangkaian Gerakan ${m}`,
+        interval0_60: 'Gerakan sering terputus dan ragu-ragu (Perlu Bimbingan)',
+        interval61_75: 'Gerakan lumayan lancar tetapi kecepatan kurang teratur (Cukup)',
+        interval76_85: 'Rangkaian gerakan lancar dan koordinasi tangan-kaki tepat (Baik)',
+        interval86_100: 'Sangat lancar, ritme konsisten dan teknik gerakan sempurna (Sangat Baik)'
       }
     ],
-    rekomendasiTindakLanjut: 'Berikan remedial untuk rentang 0-60 dan pengayaan berupa kepemimpinan tim untuk rentang 90-100.'
+    rekomendasiTindakLanjut: 'Siswa yang memperoleh nilai interval 0-60 diberikan bimbingan perorangan saat jam olahraga.'
   };
 }
 
-function getFallbackRPE(tahunPelajaran: any, semester: any) {
+function getFallbackRPE(tahunPelajaran?: any, semester?: any) {
   const tp = tahunPelajaran || '2024/2025';
-  const sem = semester || 'Ganjil';
-  return {
-    tahunPelajaran: tp,
-    semester: sem,
-    rincianBulan: [
-      { bulan: 'Juli', jumlahPekan: 4, pekanEfektif: 2, pekanTidakEfektif: 2, keterangan: 'MPLS dan Libur Semester' },
-      { bulan: 'Agustus', jumlahPekan: 5, pekanEfektif: 4, pekanTidakEfektif: 1, keterangan: 'Peringatan HUT RI' },
-      { bulan: 'September', jumlahPekan: 4, pekanEfektif: 4, pekanTidakEfektif: 0, keterangan: 'Pekan Efektif KBM' },
-      { bulan: 'Oktober', jumlahPekan: 4, pekanEfektif: 4, pekanTidakEfektif: 0, keterangan: 'Pekan Efektif KBM' },
-      { bulan: 'November', jumlahPekan: 4, pekanEfektif: 4, pekanTidakEfektif: 0, keterangan: 'Pekan Efektif KBM' },
-      { bulan: 'Desember', jumlahPekan: 5, pekanEfektif: 2, pekanTidakEfektif: 3, keterangan: 'PAS dan Pembagian Rapor' }
-    ],
-    totalPekan: 26,
-    totalPekanEfektif: 20,
-    totalJamEfektif: 80,
-    distribusiJam: '80 Jam Pelajaran dialokasikan untuk 4 Bab Materi Pokok dan Asesmen Sumatif.'
-  };
-}
-
-function getFallbackProta(grade: any, semester: any, tahunPelajaran: any) {
-  const g = grade || '1';
-  const tp = tahunPelajaran || '2024/2025';
-  return {
-    tahunPelajaran: tp,
-    grade: g,
-    semester1List: [
-      { bab: 'Bab 1', judulBab: 'Variasi Gerak Dasar Lokomotor', tpKode: `TP-${g}.1`, alokasiJp: 16 },
-      { bab: 'Bab 2', judulBab: 'Variasi Gerak Dasar Non-Lokomotor', tpKode: `TP-${g}.2`, alokasiJp: 16 },
-      { bab: 'Bab 3', judulBab: 'Variasi Gerak Dasar Manipulatif', tpKode: `TP-${g}.3`, alokasiJp: 16 }
-    ],
-    semester2List: [
-      { bab: 'Bab 4', judulBab: 'Aktivitas Senam Lantai & Ketangkasan', tpKode: `TP-${g}.4`, alokasiJp: 16 },
-      { bab: 'Bab 5', judulBab: 'Aktivitas Gerak Berirama (Ritmik)', tpKode: `TP-${g}.5`, alokasiJp: 16 },
-      { bab: 'Bab 6', judulBab: 'Aktivitas Kebugaran Jasmani & Kebersihan', tpKode: `TP-${g}.6`, alokasiJp: 16 }
-    ],
-    totalJpS1: 48,
-    totalJpS2: 48,
-    totalJpSetahun: 96
-  };
-}
-
-function getFallbackProsem(grade: any, semester: any, tahunPelajaran: any) {
-  const g = grade || '1';
   const sem = semester || '1';
-  const tp = tahunPelajaran || '2024/2025';
   return {
-    tahunPelajaran: tp,
-    grade: g,
-    semester: sem,
-    materiList: [
-      {
-        bab: 'Bab 1',
-        tpText: 'Memahami dan mempraktikkan gerak dasar lokomotor',
-        totalJp: 16,
-        distribusiMingguan: [
-          { bulan: 'Juli', minggu: 3, jp: 4 },
-          { bulan: 'Juli', minggu: 4, jp: 4 },
-          { bulan: 'Agustus', minggu: 1, jp: 4 },
-          { bulan: 'Agustus', minggu: 2, jp: 4 }
-        ]
-      },
-      {
-        bab: 'Bab 2',
-        tpText: 'Memahami dan mempraktikkan gerak dasar non-lokomotor',
-        totalJp: 16,
-        distribusiMingguan: [
-          { bulan: 'Agustus', minggu: 3, jp: 4 },
-          { bulan: 'Agustus', minggu: 4, jp: 4 },
-          { bulan: 'September', minggu: 1, jp: 4 },
-          { bulan: 'September', minggu: 2, jp: 4 }
-        ]
-      }
-    ]
+    identitas: {
+      namaSekolah: 'SD NEGERI UTAMA',
+      mataPelajaran: 'PJOK',
+      kelas: '1',
+      semester: sem,
+      tahunPelajaran: tp,
+      jpPerMinggu: '4'
+    },
+    alokasiWaktu: {
+      bulans: [
+        { bulan: 'Juli', totalPekan: 4, efektif: 2, tidakEfektif: 2 },
+        { bulan: 'Agustus', totalPekan: 5, efektif: 4, tidakEfektif: 1 },
+        { bulan: 'September', totalPekan: 4, efektif: 4, tidakEfektif: 0 },
+        { bulan: 'Oktober', totalPekan: 4, efektif: 4, tidakEfektif: 0 },
+        { bulan: 'November', totalPekan: 4, efektif: 4, tidakEfektif: 0 },
+        { bulan: 'Desember', totalPekan: 5, efektif: 2, tidakEfektif: 3 }
+      ],
+      totalPekan: 26,
+      totalPekanEfektif: 20,
+      totalPekanTidakEfektif: 6
+    },
+    pekanTidakEfektif: [
+      { namaKegiatan: 'MPLS & Masa Transisi', jumlahPekan: 2, bulan: 'Juli' },
+      { namaKegiatan: 'Peringatan HUT RI & Lomba Sekolah', jumlahPekan: 1, bulan: 'Agustus' },
+      { namaKegiatan: 'Penilaian Akhir Semester (PAS) & Pembagian Rapor', jumlahPekan: 3, bulan: 'Desember' }
+    ],
+    totalPekanEfektifFormula: '26 total pekan - 6 pekan tidak efektif = 20 Pekan Efektif',
+    totalJamEfektifFormula: '20 pekan efektif x 4 JP = 80 Jam Pelajaran (JP)',
+    catatanAnalisis: 'Alokasi jam efektif sangat mencukupi untuk menyelesaikan seluruh bab Kurikulum Merdeka PJOK.',
+    tanggalDokumen: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
   };
 }
 
-function getFallbackSlides(topic: any, grade: any, totalSlides: any) {
-  const t = topic || 'Pembelajaran PJOK SD';
+function getFallbackProta(grade?: any, semester?: any, tahunPelajaran?: any) {
   const g = grade || '1';
-  const count = parseInt(totalSlides) || 5;
+  const tp = tahunPelajaran || '2024/2025';
+  return {
+    identitas: {
+      mataPelajaran: 'PJOK',
+      kelas: g,
+      fase: parseInt(g) <= 2 ? 'A' : parseInt(g) <= 4 ? 'B' : 'C',
+      tahunPelajaran: tp,
+      totalJp2Semester: '96 JP',
+      alokasiWaktuTiapMinggu: '4 JP / Pekan',
+      semester1Weeks: '20',
+      semester2Weeks: '20'
+    },
+    rows: [
+      {
+        no: '1',
+        bab: 'Bab 1',
+        tujuanPembelajaran: 'Peserta didik dapat memahami dan mempraktikkan variasi gerak dasar lokomotor.',
+        materi: 'Gerak Dasar Lokomotor (Jalan, Lari, Lompat)',
+        alokasiWaktu: '16 JP (4 Pertemuan)',
+        semester: 'Semester 1'
+      },
+      {
+        no: '2',
+        bab: 'Bab 2',
+        tujuanPembelajaran: 'Peserta didik dapat memahami dan mempraktikkan variasi gerak dasar non-lokomotor.',
+        materi: 'Gerak Dasar Non-Lokomotor (Mengayun, Menekuk, Memutar)',
+        alokasiWaktu: '16 JP (4 Pertemuan)',
+        semester: 'Semester 1'
+      },
+      {
+        no: '3',
+        bab: 'Bab 3',
+        tujuanPembelajaran: 'Peserta didik dapat memahami dan mempraktikkan variasi gerak dasar manipulatif.',
+        materi: 'Gerak Dasar Manipulatif (Melempar & Menangkap Bola)',
+        alokasiWaktu: '16 JP (4 Pertemuan)',
+        semester: 'Semester 1'
+      },
+      {
+        no: '4',
+        bab: 'Bab 4',
+        tujuanPembelajaran: 'Peserta didik dapat memperagakan aktivitas senam lantai sederhana.',
+        materi: 'Aktivitas Senam Ketangkasan & Keseimbangan',
+        alokasiWaktu: '16 JP (4 Pertemuan)',
+        semester: 'Semester 2'
+      },
+      {
+        no: '5',
+        bab: 'Bab 5',
+        tujuanPembelajaran: 'Peserta didik dapat bergerak sesuai irama musik/ketukan.',
+        materi: 'Aktivitas Gerak Berirama (Ritmik)',
+        alokasiWaktu: '16 JP (4 Pertemuan)',
+        semester: 'Semester 2'
+      },
+      {
+        no: '6',
+        bab: 'Bab 6',
+        tujuanPembelajaran: 'Peserta didik dapat mengidentifikasi kebiasaan hidup sehat dan kebersihan diri.',
+        materi: 'Kebugaran Jasmani & Pemeliharaan Kebersihan Diri',
+        alokasiWaktu: '16 JP (4 Pertemuan)',
+        semester: 'Semester 2'
+      }
+    ],
+    tanggalDokumen: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  };
+}
+
+function getFallbackProsem(grade?: any, semester?: any, tahunPelajaran?: any) {
+  const g = grade || '1';
+  const tp = tahunPelajaran || '2024/2025';
+
+  const makeSemesterData = (semNum: number) => {
+    const monthsHeader = semNum === 1
+      ? [
+          { monthName: 'Juli', totalWeeks: 4, nonEffectiveWeeks: [1, 2] },
+          { monthName: 'Agustus', totalWeeks: 5, nonEffectiveWeeks: [3] },
+          { monthName: 'September', totalWeeks: 4, nonEffectiveWeeks: [] },
+          { monthName: 'Oktober', totalWeeks: 4, nonEffectiveWeeks: [] },
+          { monthName: 'November', totalWeeks: 4, nonEffectiveWeeks: [] },
+          { monthName: 'Desember', totalWeeks: 5, nonEffectiveWeeks: [3, 4, 5] }
+        ]
+      : [
+          { monthName: 'Januari', totalWeeks: 4, nonEffectiveWeeks: [1] },
+          { monthName: 'Februari', totalWeeks: 4, nonEffectiveWeeks: [] },
+          { monthName: 'Maret', totalWeeks: 4, nonEffectiveWeeks: [3] },
+          { monthName: 'April', totalWeeks: 4, nonEffectiveWeeks: [2, 3] },
+          { monthName: 'Mei', totalWeeks: 5, nonEffectiveWeeks: [] },
+          { monthName: 'Juni', totalWeeks: 4, nonEffectiveWeeks: [3, 4] }
+        ];
+
+    const topics = semNum === 1
+      ? [
+          { no: '1', bab: 'Bab 1', topik: 'Variasi Gerak Dasar Lokomotor', pert: '1-4', jp: '16 JP' },
+          { no: '2', bab: 'Bab 2', topik: 'Variasi Gerak Dasar Non-Lokomotor', pert: '5-8', jp: '16 JP' },
+          { no: '3', bab: 'Bab 3', topik: 'Variasi Gerak Dasar Manipulatif', pert: '9-12', jp: '16 JP' }
+        ]
+      : [
+          { no: '4', bab: 'Bab 4', topik: 'Aktivitas Senam Lantai & Ketangkasan', pert: '13-16', jp: '16 JP' },
+          { no: '5', bab: 'Bab 5', topik: 'Aktivitas Gerak Berirama (Ritmik)', pert: '17-20', jp: '16 JP' },
+          { no: '6', bab: 'Bab 6', topik: 'Aktivitas Kebugaran & Kebersihan Diri', pert: '21-24', jp: '16 JP' }
+        ];
+
+    const rows = topics.map((t) => ({
+      no: t.no,
+      bab: t.bab,
+      topik: t.topik,
+      pertemuanKe: t.pert,
+      alokasiWaktu: t.jp,
+      months: monthsHeader.map((mh) => ({
+        monthName: mh.monthName,
+        weeks: Array.from({ length: mh.totalWeeks }, (_, wIdx) => {
+          const wNum = wIdx + 1;
+          const isNonEff = mh.nonEffectiveWeeks.includes(wNum);
+          return {
+            weekNum: wNum,
+            value: isNonEff ? 'L' : '4',
+            isEffective: !isNonEff
+          };
+        })
+      }))
+    }));
+
+    return { monthsHeader, rows };
+  };
+
+  return {
+    identitas: {
+      mataPelajaran: 'PJOK',
+      kelas: g,
+      fase: parseInt(g) <= 2 ? 'A' : parseInt(g) <= 4 ? 'B' : 'C',
+      tahunPelajaran: tp,
+      alokasiWaktuTiapMinggu: '4 JP / Pekan'
+    },
+    ganjil: makeSemesterData(1),
+    genap: makeSemesterData(2),
+    keterangan: 'L = Libur/MPLS/Asesmen. Angka 4 = Alokasi 4 JP pada pekan efektif KBM.',
+    tanggalDokumen: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+    kepalaSekolah: 'Kepala Sekolah SD',
+    guruMapel: 'Guru PJOK'
+  };
+}
+
+function getFallbackSlides(topic: any, grade: any, totalSlides: any, reqBody?: any) {
+  const t = topic || reqBody?.topikMateri || 'Pembelajaran PJOK SD';
+  const g = grade || reqBody?.kelas || '1';
+  const mp = reqBody?.mataPelajaran || 'PJOK';
+  const f = reqBody?.fase || 'A';
+  const count = parseInt(totalSlides || reqBody?.jumlahSlide) || 5;
   const slides = [];
+
   slides.push({
-    slideNumber: 1,
+    slideNo: 1,
     layoutType: 'title_slide',
     title: t,
-    bulletPoints: [`Mata Pelajaran: PJOK Kelas ${g} SD`, 'Kurikulum Merdeka', 'Selamat Belajar & Salam Olahraga!'],
+    points: [`Mata Pelajaran: ${mp} Kelas ${g} SD`, 'Kurikulum Merdeka', 'Selamat Belajar & Salam Olahraga!'],
     speakerNotes: 'Buka sesi dengan salam hangat dan motivasi semangat bergerak.',
-    visualPrompt: 'Visual anak SD gembira berolahraga di lapangan sekolah'
+    visualRecommendation: 'Visual anak SD gembira berolahraga di lapangan sekolah'
   });
   slides.push({
-    slideNumber: 2,
+    slideNo: 2,
     layoutType: 'content_slide',
     title: 'Tujuan Pembelajaran Hari Ini',
-    bulletPoints: [
+    points: [
       `Memahami konsep dasar ${t}`,
       'Mempraktikkan teknik gerakan dengan aman',
       'Menjaga kekompakan dan disiplin kelompok'
     ],
     speakerNotes: 'Jelaskan tujuan utama yang ingin dicapai selama pembelajaran.',
-    visualPrompt: 'Ikon target dan anak-anak bekerja sama'
+    visualRecommendation: 'Ikon target dan anak-anak bekerja sama'
   });
   for (let i = 3; i <= count; i++) {
     slides.push({
-      slideNumber: i,
+      slideNo: i,
       layoutType: 'content_slide',
       title: `Materi & Langkah Latihan #${i - 2}`,
-      bulletPoints: [
+      points: [
         'Lakukan pemanasan fisik secukupnya',
         `Praktekkan variasi gerakan ${t}`,
         'Saling memberikan dukungan antar teman'
       ],
       speakerNotes: 'Arahkan siswa ke area praktik lapangan.',
-      visualPrompt: 'Diorama lapangan dan anak-anak melakukan gerakan fisik'
+      visualRecommendation: 'Diorama lapangan dan anak-anak melakukan gerakan fisik'
     });
   }
   return {
-    judulPresentasi: `Presentasi Media Ajar: ${t}`,
-    topik: t,
-    kelas: `Kelas ${g}`,
-    totalSlide: count,
+    identitas: {
+      mataPelajaran: mp,
+      kelas: g,
+      fase: f,
+      topikMateri: t,
+      jumlahSlide: String(count),
+      gayaDesain: reqBody?.gayaDesain || 'Sederhana & Minimalis',
+      tanggalDokumen: reqBody?.tanggalDokumen || new Date().toLocaleDateString('id-ID'),
+      guruPenyusun: reqBody?.guruPenyusun || 'Guru PJOK'
+    },
     slides
   };
 }
