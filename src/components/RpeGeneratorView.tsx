@@ -10,10 +10,12 @@ import {
   ClipboardList,
   Calendar,
   Download,
-  Printer
+  Printer,
+  FileText
 } from 'lucide-react';
 import { RpeData } from '../types';
 import { downloadDocFile, copyAndOpenGoogleDocs, exportRpeToDoc } from '../lib/exportUtils';
+import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
 export default function RpeGeneratorView() {
   // Input states
@@ -35,6 +37,7 @@ export default function RpeGeneratorView() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const handleGenerateRpe = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,8 +122,32 @@ export default function RpeGeneratorView() {
     downloadDocFile(filename, docHtml);
   };
 
+  const handleDownloadPdf = async () => {
+    if (!rpeResult || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const docHtml = exportRpeToDoc(rpeResult);
+      const filename = `RPE_${rpeResult.identitas.mataPelajaran.replace(/\s+/g, '_')}_Kelas${rpeResult.identitas.kelas}_${rpeResult.identitas.semester}`;
+      const success = await downloadHtmlAsPdf(filename, docHtml, {
+        title: `RPE - ${rpeResult.identitas.mataPelajaran}`,
+        orientation: 'portrait'
+      });
+      if (!success) {
+        printHtmlDocument(docHtml, `RPE - ${rpeResult.identitas.mataPelajaran}`);
+      }
+    } catch (err) {
+      console.error(err);
+      const docHtml = exportRpeToDoc(rpeResult);
+      printHtmlDocument(docHtml, `RPE - ${rpeResult.identitas.mataPelajaran}`);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const handlePrint = () => {
-    window.print();
+    if (!rpeResult) return;
+    const docHtml = exportRpeToDoc(rpeResult);
+    printHtmlDocument(docHtml, `RPE - ${rpeResult.identitas.mataPelajaran}`);
   };
 
   return (
@@ -343,10 +370,19 @@ export default function RpeGeneratorView() {
                 </button>
 
                 <button
+                  onClick={handleDownloadPdf}
+                  disabled={isExportingPdf}
+                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-xs disabled:opacity-75"
+                >
+                  <Download className="w-3.5 h-3.5 text-white" />
+                  <span>{isExportingPdf ? 'Memproses PDF...' : 'Unduh PDF'}</span>
+                </button>
+
+                <button
                   onClick={handleDownloadDoc}
                   className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition"
                 >
-                  <Download className="w-3.5 h-3.5 text-slate-500" />
+                  <FileText className="w-3.5 h-3.5 text-slate-500" />
                   <span>Unduh Word</span>
                 </button>
 
@@ -355,7 +391,7 @@ export default function RpeGeneratorView() {
                   className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition"
                 >
                   <Printer className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Cetak / PDF</span>
+                  <span>Cetak</span>
                 </button>
               </div>
             </div>

@@ -19,7 +19,10 @@ export function getClientSupabaseCredentials() {
   if (url && anonKey) {
     return { url, anonKey };
   }
-  return null;
+  return {
+    url: 'https://gohycvfxflwwmdogiwse.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvaHljdmZ4Zmx3d21kb2dpd3NlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMjAxODIsImV4cCI6MjEwMDg5NjE4Mn0.kUE56HSrf0AZB0a7HFDz2mjrEaPskQ-4RSOWDhrymPQ'
+  };
 }
 
 export function saveClientSupabaseCredentials(url: string, anonKey: string) {
@@ -175,6 +178,21 @@ function saveLocalFallback<T>(key: string, data: T) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+function normalizeClasses(classes: ClassData[]): ClassData[] {
+  if (!Array.isArray(classes)) return [];
+  return classes.map(cls => ({
+    ...cls,
+    students: (cls.students || []).map(st => {
+      const rawG = String(st.gender || '').trim().toUpperCase();
+      const validGender: 'L' | 'P' = (rawG === 'P' || rawG === 'PEREMPUAN' || rawG === 'W' || rawG === 'WANITA' || rawG === 'FEMALE') ? 'P' : 'L';
+      return {
+        ...st,
+        gender: validGender
+      };
+    })
+  }));
+}
+
 // Unified CRUD operations
 export async function getClasses(): Promise<ClassData[]> {
   // Check client Supabase
@@ -183,8 +201,9 @@ export async function getClasses(): Promise<ClassData[]> {
     try {
       const { data, error } = await clientSupabase.from('classes').select('*').order('name');
       if (!error && data) {
-        saveLocalFallback(STORAGE_KEYS.CLASSES, data);
-        return data as ClassData[];
+        const normalized = normalizeClasses(data as ClassData[]);
+        saveLocalFallback(STORAGE_KEYS.CLASSES, normalized);
+        return normalized;
       }
     } catch (e) {
       console.error('Error fetching classes from client Supabase:', e);
@@ -196,15 +215,17 @@ export async function getClasses(): Promise<ClassData[]> {
     const res = await fetch('/api/classes');
     if (res.ok) {
       const data = await res.json();
-      saveLocalFallback(STORAGE_KEYS.CLASSES, data);
-      return data;
+      const normalized = normalizeClasses(data);
+      saveLocalFallback(STORAGE_KEYS.CLASSES, normalized);
+      return normalized;
     }
   } catch (e) {
     console.log('[DB Client] API /api/classes failed, using local storage.');
   }
 
   // Fallback to Local Storage
-  return getLocalFallback<ClassData[]>(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
+  const local = getLocalFallback<ClassData[]>(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
+  return normalizeClasses(local);
 }
 
 export async function saveClasses(allClasses: ClassData[]): Promise<boolean> {

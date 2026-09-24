@@ -547,6 +547,7 @@ export default function App() {
               classes={classes}
               selectedClassId={selectedClassId}
               setSelectedClassId={setSelectedClassId}
+              onUpdateStudents={handleUpdateStudents}
             />
           )}
           

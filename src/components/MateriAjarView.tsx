@@ -23,7 +23,7 @@ import {
   Flame,
   CheckSquare
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { copyAndOpenGoogleDocs, downloadDocFile } from '../lib/exportUtils';
 
 // Types for Materi Ajar

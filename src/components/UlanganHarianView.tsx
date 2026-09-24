@@ -30,6 +30,7 @@ import {
   Users
 } from 'lucide-react';
 import { downloadDocFile } from '../lib/exportUtils';
+import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
 // Pre-written common PJOK Learning Objectives (TP) for quick selection
 const PRESETS_TP = [
@@ -128,6 +129,7 @@ export default function UlanganHarianView() {
   // Toggles inside test paper
   const [showAnswers, setShowAnswers] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Classroom grading state (seeded with 8 standard student names)
   const [students, setStudents] = useState<StudentGrade[]>([
@@ -335,9 +337,9 @@ export default function UlanganHarianView() {
       });
   };
 
-  // Word Export capability
-  const handleExportDoc = () => {
-    if (!testData) return;
+  // Generate HTML for Doc/PDF/Print
+  const getUlanganHtml = () => {
+    if (!testData) return '';
 
     let testSpecificHtml = '';
 
@@ -414,7 +416,7 @@ export default function UlanganHarianView() {
       `;
     }
 
-    const fullHtml = `
+    return `
       <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.5;">
         <div style="text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 20px;">
           <h2 style="margin: 0; text-transform: uppercase; font-size: 14pt;">${testData.title.toUpperCase()}</h2>
@@ -450,8 +452,42 @@ export default function UlanganHarianView() {
         </div>
       </div>
     `;
+  };
 
+  // Word Export capability
+  const handleExportDoc = () => {
+    if (!testData) return;
+    const fullHtml = getUlanganHtml();
     downloadDocFile(`Ulangan_Harian_Kelas${testData.grade}_${testData.materi.replace(/\s+/g, '_')}`, fullHtml);
+  };
+
+  // PDF Export capability
+  const handleDownloadPdf = async () => {
+    if (!testData || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const fullHtml = getUlanganHtml();
+      const filename = `Ulangan_Harian_Kelas${testData.grade}_${testData.materi.replace(/\s+/g, '_')}`;
+      const success = await downloadHtmlAsPdf(filename, fullHtml, {
+        title: testData.title || `Ulangan Harian - ${testData.materi}`,
+        orientation: 'portrait'
+      });
+      if (!success) {
+        printHtmlDocument(fullHtml, testData.title || `Ulangan Harian - ${testData.materi}`);
+      }
+    } catch (err) {
+      console.error(err);
+      const fullHtml = getUlanganHtml();
+      printHtmlDocument(fullHtml, testData.title || `Ulangan Harian - ${testData.materi}`);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handlePrint = () => {
+    if (!testData) return;
+    const fullHtml = getUlanganHtml();
+    printHtmlDocument(fullHtml, testData.title || `Ulangan Harian - ${testData.materi}`);
   };
 
   // CSV download for roster
@@ -732,14 +768,22 @@ export default function UlanganHarianView() {
                     {isCopied ? 'Tersalin!' : 'Salin Text'}
                   </button>
                   <button
+                    onClick={handleDownloadPdf}
+                    disabled={isExportingPdf}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1 disabled:opacity-75"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{isExportingPdf ? 'Memproses PDF...' : 'Unduh PDF'}</span>
+                  </button>
+                  <button
                     onClick={handleExportDoc}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <FileSignature className="w-3.5 h-3.5" />
                     <span>Download Word</span>
                   </button>
                   <button
-                    onClick={() => window.print()}
+                    onClick={handlePrint}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold border border-slate-700 cursor-pointer flex items-center gap-1"
                   >
                     <Printer className="w-3.5 h-3.5" />

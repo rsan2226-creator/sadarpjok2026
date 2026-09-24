@@ -27,9 +27,65 @@ import {
   FileDown,
   ClipboardList,
   Printer,
-  Copy
+  Copy,
+  ArrowLeftRight,
+  Wand2
 } from 'lucide-react';
 import { exportAbsensiToDoc, exportPenilaianToDoc, downloadDocFile } from '../lib/exportUtils';
+import RekapAbsensiBulananView from './RekapAbsensiBulananView';
+
+// Helper function to detect or infer gender accurately (L/P)
+export function inferGender(rawGenderStr?: string, name?: string): 'L' | 'P' {
+  if (rawGenderStr) {
+    const clean = rawGenderStr.trim().toUpperCase();
+    if (
+      clean.startsWith('P') || 
+      clean.startsWith('W') || // Wanita
+      clean.includes('PEREMPUAN') || 
+      clean.includes('FEMALE') || 
+      clean.includes('GIRL') ||
+      clean === 'PR' ||
+      clean.includes('PUTRI') ||
+      clean.includes('WANITA')
+    ) {
+      return 'P';
+    }
+    if (
+      clean.startsWith('L') || 
+      clean.includes('LAKI') || 
+      clean.includes('PRIA') || 
+      clean.includes('MALE') || 
+      clean.includes('BOY') ||
+      clean === 'LK' ||
+      clean.includes('PUTRA')
+    ) {
+      return 'L';
+    }
+  }
+
+  // Smart Indonesian name detection for female names as fallback
+  if (name) {
+    const lowerName = name.toLowerCase();
+    const words = lowerName.split(/[^a-zA-Z]+/);
+    const femaleKeywords = new Set([
+      'siti', 'putri', 'dewi', 'ayu', 'indah', 'kartika', 'fitri', 'fitria', 'fitriyani', 'utami', 
+      'bella', 'citra', 'evi', 'lestari', 'sari', 'rahma', 'rahmawati', 'zahra', 'anisa', 
+      'annisa', 'nabila', 'fatimah', 'nurul', 'aulia', 'safira', 'kirana', 
+      'amalia', 'widya', 'nadia', 'tiara', 'amelia', 'mutiara', 'salma', 
+      'aisyah', 'khadijah', 'intan', 'novi', 'novita', 'wulan', 'wulandari', 'cantika', 'syifa', 
+      'dinda', 'najwa', 'adinda', 'alifah', 'maya', 'diah', 'anggraeni', 'anggraini', 'kusuma',
+      'nuraini', 'triani', 'nurlaila', 'marwah', 'khansa', 'azizah', 'farida', 'hanifah', 'maharani',
+      'ratna', 'yuni', 'tri', 'endang', 'ani', 'rina', 'marlina', 'sulastri'
+    ]);
+    for (const w of words) {
+      if (femaleKeywords.has(w)) {
+        return 'P';
+      }
+    }
+  }
+
+  return 'L';
+}
 
 interface AbsensiPenilaianViewProps {
   classes: ClassData[];
@@ -38,6 +94,7 @@ interface AbsensiPenilaianViewProps {
   onUpdateStudents: (classId: string, students: Student[]) => void;
   onAddClass?: (newClass: ClassData) => void;
   onDeleteClass?: (classId: string) => void;
+  defaultSubTab?: 'absensi' | 'absensi_bulanan' | 'penilaian';
 }
 
 export default function AbsensiPenilaianView({ 
@@ -46,10 +103,11 @@ export default function AbsensiPenilaianView({
   setSelectedClassId,
   onUpdateStudents,
   onAddClass,
-  onDeleteClass
+  onDeleteClass,
+  defaultSubTab
 }: AbsensiPenilaianViewProps) {
   
-  const [activeSubTab, setActiveSubTab] = useState<'absensi' | 'penilaian'>('absensi');
+  const [activeSubTab, setActiveSubTab] = useState<'absensi' | 'absensi_bulanan' | 'penilaian'>(defaultSubTab || 'absensi_bulanan');
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
@@ -119,12 +177,17 @@ export default function AbsensiPenilaianView({
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
-  // Score states for currently edited student
+  // Score & Data states for currently edited student
   const [editName, setEditName] = useState<string>('');
   const [editNisn, setEditNisn] = useState<string>('');
+  const [editGender, setEditGender] = useState<'L' | 'P'>('L');
   const [editCognitive, setEditCognitive] = useState<number>(0);
   const [editPsychomotor, setEditPsychomotor] = useState<number>(0);
   const [editAffective, setEditAffective] = useState<number>(0);
+
+  // Gender management modal
+  const [isFixingGenderModalOpen, setIsFixingGenderModalOpen] = useState(false);
+  const [genderFixSuccessMsg, setGenderFixSuccessMsg] = useState<string | null>(null);
 
   // Copy/Export status states
   const [isCopiedAbsensi, setIsCopiedAbsensi] = useState(false);
@@ -186,11 +249,8 @@ export default function AbsensiPenilaianView({
           const nameVal = String(row[nameColIdx] || '').trim();
           if (!nameVal) continue;
 
-          let genderVal = String(row[genderColIdx] || '').trim().toUpperCase();
-          let gender: 'L' | 'P' = 'L';
-          if (genderVal.startsWith('P') || genderVal.includes('PEREMPUAN') || genderVal.includes('FEMALE') || genderVal === 'W') {
-            gender = 'P';
-          }
+          let genderVal = String(row[genderColIdx] || '').trim();
+          let gender: 'L' | 'P' = inferGender(genderVal, nameVal);
 
           const nisnVal = nisnColIdx !== -1 && row[nisnColIdx] !== undefined && row[nisnColIdx] !== null 
             ? String(row[nisnColIdx]).trim() 
@@ -209,6 +269,12 @@ export default function AbsensiPenilaianView({
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  const toggleImportPreviewGender = (index: number) => {
+    setImportPreview(prev => prev.map((item, idx) => 
+      idx === index ? { ...item, gender: item.gender === 'L' ? 'P' : 'L' } : item
+    ));
   };
 
   const handlePasteParse = () => {
@@ -240,16 +306,23 @@ export default function AbsensiPenilaianView({
 
         if (cleanCols.length === 1) {
           name = cleanCols[0];
+          gender = inferGender(undefined, name);
         } else {
           // Identify columns smartly: Name, NISN, Gender
-          let foundGender: 'L' | 'P' | null = null;
+          let foundGenderRaw = '';
           let foundNisn = '';
           let foundName = '';
 
           cleanCols.forEach((col, cIdx) => {
             const colUpper = col.toUpperCase();
-            if (!foundGender && (colUpper === 'L' || colUpper === 'P' || colUpper === 'LAKIK' || colUpper === 'LAKI-LAKI' || colUpper === 'PEREMPUAN' || colUpper === 'FEMALE' || colUpper === 'MALE')) {
-              foundGender = colUpper.startsWith('P') || colUpper.includes('PEREMPUAN') || colUpper.includes('FEMALE') ? 'P' : 'L';
+            if (!foundGenderRaw && (
+              colUpper === 'L' || colUpper === 'P' || 
+              colUpper === 'LK' || colUpper === 'PR' ||
+              colUpper.includes('LAKI') || colUpper.includes('PRIA') || 
+              colUpper.includes('PEREMPUAN') || colUpper.includes('WANITA') || 
+              colUpper.includes('FEMALE') || colUpper.includes('MALE')
+            )) {
+              foundGenderRaw = col;
             } else if (!foundNisn && /^\d{5,15}$/.test(col)) {
               foundNisn = col;
             } else if (cIdx === 0 && (/^\d+$/.test(col) || /^\d+\.$/.test(col))) {
@@ -262,7 +335,7 @@ export default function AbsensiPenilaianView({
           });
 
           name = foundName || cleanCols[0];
-          gender = foundGender || 'L';
+          gender = inferGender(foundGenderRaw, name);
           nisn = foundNisn || undefined;
         }
 
@@ -380,6 +453,7 @@ export default function AbsensiPenilaianView({
     setEditingStudentId(student.id);
     setEditName(student.name);
     setEditNisn(student.nisn || '');
+    setEditGender(student.gender || 'L');
     setEditCognitive(student.scores.cognitive);
     setEditPsychomotor(student.scores.psychomotor);
     setEditAffective(student.scores.affective);
@@ -393,6 +467,7 @@ export default function AbsensiPenilaianView({
           ...s,
           name: editName.trim(),
           nisn: editNisn.trim() || undefined,
+          gender: editGender,
           scores: {
             cognitive: editCognitive,
             psychomotor: editPsychomotor,
@@ -405,6 +480,45 @@ export default function AbsensiPenilaianView({
 
     onUpdateStudents(activeClass.id, updatedStudents);
     setEditingStudentId(null);
+  };
+
+  // Instant toggle student gender L <-> P
+  const handleToggleStudentGender = (studentId: string) => {
+    if (!activeClass) return;
+    const updatedStudents = activeClass.students.map(s => {
+      if (s.id === studentId) {
+        const nextGender: 'L' | 'P' = s.gender === 'L' ? 'P' : 'L';
+        return { ...s, gender: nextGender };
+      }
+      return s;
+    });
+    onUpdateStudents(activeClass.id, updatedStudents);
+  };
+
+  // Smart auto-detection of all student genders based on Indonesian names
+  const handleAutoDetectAllGenders = () => {
+    if (!activeClass) return;
+    let changedCount = 0;
+    const updatedStudents = activeClass.students.map(s => {
+      const inferred = inferGender(undefined, s.name);
+      if (inferred !== s.gender) {
+        changedCount++;
+        return { ...s, gender: inferred };
+      }
+      return s;
+    });
+    onUpdateStudents(activeClass.id, updatedStudents);
+    setGenderFixSuccessMsg(`Berhasil memeriksa nama! ${changedCount} siswa diperbarui jenis kelaminnya.`);
+    setTimeout(() => setGenderFixSuccessMsg(null), 4000);
+  };
+
+  // Set all students in active class to specific gender
+  const handleSetAllGenders = (targetGender: 'L' | 'P') => {
+    if (!activeClass) return;
+    const updatedStudents = activeClass.students.map(s => ({ ...s, gender: targetGender }));
+    onUpdateStudents(activeClass.id, updatedStudents);
+    setGenderFixSuccessMsg(`Seluruh siswa (${updatedStudents.length}) diatur menjadi ${targetGender === 'L' ? 'Laki-laki' : 'Perempuan'}.`);
+    setTimeout(() => setGenderFixSuccessMsg(null), 4000);
   };
 
   // Helper to get descriptive status
@@ -611,18 +725,137 @@ export default function AbsensiPenilaianView({
               <p className="text-[10px] text-slate-400">Pendaftaran siswa baru kelas 1 sampai kelas 6 (Mendukung Excel & Copy-Paste)</p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              setIsAddingStudent(!isAddingStudent);
-              setImportPreview([]);
-              setImportError(null);
-              setImportSuccessMsg(null);
-            }}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" /> {isAddingStudent ? 'Batal' : 'Tambah Siswa'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setIsFixingGenderModalOpen(!isFixingGenderModalOpen);
+                if (isAddingStudent) setIsAddingStudent(false);
+              }}
+              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title="Perbaiki jenis kelamin siswa (L/P), sinkronisasi cepat, atau deteksi otomatis berbasis nama"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" /> 
+              <span>Perbaiki Jenis Kelamin ({boysCount} L / {girlsCount} P)</span>
+            </button>
+            <button
+              onClick={() => {
+                setIsAddingStudent(!isAddingStudent);
+                if (isFixingGenderModalOpen) setIsFixingGenderModalOpen(false);
+                setImportPreview([]);
+                setImportError(null);
+                setImportSuccessMsg(null);
+              }}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> {isAddingStudent ? 'Batal' : 'Tambah Siswa'}
+            </button>
+          </div>
         </div>
+
+        {/* Panel Penyesuaian & Perbaikan Jenis Kelamin Siswa */}
+        {isFixingGenderModalOpen && (
+          <div className="pt-4 border-t border-slate-100 space-y-4 animate-fadeIn">
+            <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-pink-50/50 rounded-xl border border-blue-100/80">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-extrabold text-slate-800 text-xs flex items-center gap-1.5">
+                    <ArrowLeftRight className="w-4 h-4 text-blue-600" />
+                    Panel Penyesuaian & Perbaikan Jenis Kelamin Siswa — {activeClass?.name}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                    Klik tombol <strong className="text-rose-700">Ubah ke P</strong> atau <strong className="text-blue-700">Ubah ke L</strong> pada siswa di bawah untuk membalik jenis kelamin seketika. Anda juga dapat menggunakan fitur deteksi otomatis berbasis nama khas Indonesia.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleAutoDetectAllGenders}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                    title="Menganalisis nama siswa dan mengoreksi L/P secara otomatis"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" /> Deteksi Otomatis Nama
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetAllGenders('L')}
+                    className="px-2.5 py-1.5 bg-blue-100/80 hover:bg-blue-200 text-blue-800 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                  >
+                    Semua L
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetAllGenders('P')}
+                    className="px-2.5 py-1.5 bg-rose-100/80 hover:bg-rose-200 text-rose-800 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                  >
+                    Semua P
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsFixingGenderModalOpen(false)}
+                    className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+
+              {genderFixSuccessMsg && (
+                <div className="mt-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{genderFixSuccessMsg}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Grid of Students to Toggle Gender */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[320px] overflow-y-auto">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead className="bg-slate-50 text-slate-600 font-bold sticky top-0 border-b border-slate-200 z-10">
+                  <tr>
+                    <th className="p-2.5 w-12 text-center">No</th>
+                    <th className="p-2.5">Nama Siswa</th>
+                    <th className="p-2.5 w-32 font-mono">NISN</th>
+                    <th className="p-2.5 w-44 text-center">Jenis Kelamin Saat Ini</th>
+                    <th className="p-2.5 text-center w-36">Aksi Cepat</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {activeClass?.students.map((st, idx) => (
+                    <tr key={st.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-2.5 text-center font-mono font-bold text-slate-400">{idx + 1}</td>
+                      <td className="p-2.5 font-bold text-slate-800">{st.name}</td>
+                      <td className="p-2.5 text-slate-400 font-mono text-[11px]">{st.nisn || '-'}</td>
+                      <td className="p-2.5 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                          st.gender === 'L' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {st.gender === 'L' ? '👦 Laki-laki (L)' : '👧 Perempuan (P)'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStudentGender(st.id)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto ${
+                            st.gender === 'L'
+                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                          }`}
+                          title={`Ubah menjadi ${st.gender === 'L' ? 'Perempuan (P)' : 'Laki-laki (L)'}`}
+                        >
+                          <ArrowLeftRight className="w-3 h-3" />
+                          <span>Ubah ke {st.gender === 'L' ? 'P' : 'L'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {isAddingStudent && (
           <div className="pt-4 border-t border-slate-100 space-y-4">
@@ -820,13 +1053,19 @@ export default function AbsensiPenilaianView({
                               <td className="p-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
                               <td className="p-2 font-medium text-slate-800">{item.name}</td>
                               <td className="p-2">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  item.gender === 'L' 
-                                    ? 'text-indigo-700 bg-indigo-50' 
-                                    : 'text-rose-700 bg-rose-50'
-                                }`}>
-                                  {item.gender === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleImportPreviewGender(idx)}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all border ${
+                                    item.gender === 'L' 
+                                      ? 'text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200' 
+                                      : 'text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200'
+                                  }`}
+                                  title="Klik untuk ubah jenis kelamin sebelum dimasukkan ke kelas"
+                                >
+                                  <span>{item.gender === 'L' ? 'L (Laki-laki)' : 'P (Perempuan)'}</span>
+                                  <ArrowLeftRight className="w-2.5 h-2.5 opacity-60" />
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -841,8 +1080,18 @@ export default function AbsensiPenilaianView({
         )}
       </div>
 
-      {/* Tab bar for Absensi vs Penilaian */}
+      {/* Tab bar for Absensi vs Rekap Bulanan vs Penilaian */}
       <div className="flex border-b border-slate-100">
+        <button
+          onClick={() => setActiveSubTab('absensi_bulanan')}
+          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeSubTab === 'absensi_bulanan'
+              ? 'border-emerald-600 text-emerald-700'
+              : 'border-transparent text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" /> Rekap Absensi Bulanan (Word .Doc & Siap Cetak)
+        </button>
         <button
           onClick={() => setActiveSubTab('absensi')}
           className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
@@ -851,7 +1100,7 @@ export default function AbsensiPenilaianView({
               : 'border-transparent text-slate-400 hover:text-slate-600'
           }`}
         >
-          <UserCheck className="w-4 h-4" /> Rekap Absensi Taktis
+          <UserCheck className="w-4 h-4" /> Presensi Harian Taktis
         </button>
         <button
           onClick={() => setActiveSubTab('penilaian')}
@@ -865,7 +1114,15 @@ export default function AbsensiPenilaianView({
         </button>
       </div>
 
-      {/* SUB-TAB: ABSENSI */}
+      {/* SUB-TAB: REKAP BULANAN */}
+      {activeSubTab === 'absensi_bulanan' && activeClass && (
+        <RekapAbsensiBulananView
+          activeClass={activeClass}
+          onUpdateStudents={onUpdateStudents}
+        />
+      )}
+
+      {/* SUB-TAB: ABSENSI HARIAN */}
       {activeSubTab === 'absensi' && (
         <div className="space-y-6">
           {/* Export & Cetak Bar (no-print) */}
@@ -971,7 +1228,21 @@ export default function AbsensiPenilaianView({
                             <div className="text-[10px] text-slate-300 font-mono font-normal mt-0.5 italic">NISN: -</div>
                           )}
                         </td>
-                        <td className="p-4 text-slate-400 font-mono font-bold">{student.gender}</td>
+                        <td className="p-4">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStudentGender(student.id)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold border transition-all cursor-pointer ${
+                              student.gender === 'L'
+                                ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                            }`}
+                            title="Klik untuk mengubah jenis kelamin siswa (L <-> P)"
+                          >
+                            <span>{student.gender === 'L' ? 'L' : 'P'}</span>
+                            <ArrowLeftRight className="w-2.5 h-2.5 opacity-60" />
+                          </button>
+                        </td>
                         <td className="p-4">
                           <div className="flex items-center justify-center gap-2">
                             {/* Hadir */}
@@ -1130,7 +1401,7 @@ export default function AbsensiPenilaianView({
                         <td className="p-4 font-mono font-bold text-slate-400">{idx + 1}</td>
                         <td className="p-4 font-semibold text-slate-800">
                           {isEditing ? (
-                            <div className="space-y-2 max-w-[200px]">
+                            <div className="space-y-2 max-w-[220px]">
                               <div>
                                 <label className="text-[9px] font-bold text-slate-400 block uppercase">Nama Siswa</label>
                                 <input
@@ -1140,6 +1411,17 @@ export default function AbsensiPenilaianView({
                                   className="w-full border border-slate-200 rounded px-2 py-1 text-xs"
                                   required
                                 />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold text-slate-400 block uppercase">Jenis Kelamin</label>
+                                <select
+                                  value={editGender}
+                                  onChange={(e) => setEditGender(e.target.value as 'L' | 'P')}
+                                  className="w-full border border-slate-200 rounded px-2 py-1 text-xs font-semibold focus:outline-none focus:border-emerald-500 bg-white"
+                                >
+                                  <option value="L">Laki-laki (L)</option>
+                                  <option value="P">Perempuan (P)</option>
+                                </select>
                               </div>
                               <div>
                                 <label className="text-[9px] font-bold text-slate-400 block uppercase">NISN</label>
@@ -1157,7 +1439,19 @@ export default function AbsensiPenilaianView({
                             <>
                               <div className="flex items-center gap-1.5">
                                 <span>{student.name}</span>
-                                <span className="text-[10px] text-slate-400 font-semibold">({student.gender})</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleStudentGender(student.id)}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                                    student.gender === 'L'
+                                      ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                                      : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                  }`}
+                                  title="Klik untuk mengubah jenis kelamin (L <-> P)"
+                                >
+                                  <span>{student.gender === 'L' ? 'L' : 'P'}</span>
+                                  <ArrowLeftRight className="w-2.5 h-2.5 opacity-60" />
+                                </button>
                               </div>
                               {student.nisn ? (
                                 <div className="text-[10px] text-slate-400 font-mono font-normal mt-0.5">NISN: {student.nisn}</div>

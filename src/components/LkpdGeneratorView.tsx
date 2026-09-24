@@ -17,83 +17,136 @@ import {
   CheckCircle2,
   Heart,
   Palette,
-  CheckSquare
+  CheckSquare,
+  Printer,
+  Zap,
+  Shield,
+  Flame,
+  Target,
+  Trophy,
+  Dumbbell,
+  Award,
+  ChevronRight,
+  Activity
 } from 'lucide-react';
 import { InteractiveLkpdData } from '../types';
 import { downloadDocFile, copyAndOpenGoogleDocs, exportLkpdToDoc } from '../lib/exportUtils';
-import html2canvas from 'html2canvas';
+import { downloadElementAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import { 
+  PJOK_SD_PRESETS, 
+  DEFAULT_PJOK_KALIMANTONG_LKPD, 
+  generateLkpdFromPreset, 
+  PjokLkpdPreset 
+} from '../data/pjokLkpdPresets';
+import html2canvas from 'html2canvas-pro';
 
 export default function LkpdGeneratorView() {
   // Input mode selection
   const [activeInputTab, setActiveInputTab] = useState<'v1' | 'v2' | 'infografis' | 'raw'>('v1');
   const [selectedInfoStyle, setSelectedInfoStyle] = useState<'info_v1' | 'info_v2' | 'info_v3' | 'info_v4'>('info_v1');
 
-  // Shared states
-  const [mataPelajaran, setMataPelajaran] = useState('Ilmu Pengetahuan Alam dan Sosial (IPAS)');
+  // Shared states - Defaulted specifically to PJOK SD Negeri Kalimantong
+  const [mataPelajaran, setMataPelajaran] = useState('Pendidikan Jasmani, Olahraga, dan Kesehatan (PJOK)');
   const [kelas, setKelas] = useState('4');
-  const [topikMateri, setTopikMateri] = useState('Bagian Tubuh Tumbuhan dan Fungsinya');
+  const [topikMateri, setTopikMateri] = useState('Variasi & Kombinasi Pola Gerak Dasar Lokomotor dan Manipulatif (Sepak Bola Mini)');
   const [guruPenyusun, setGuruPenyusun] = useState('Ahmad Rafsanjani, S.Pd.');
-  const [sekolah, setSekolah] = useState('SD Negeri Jayakarta');
+  const [sekolah, setSekolah] = useState('SD Negeri Kalimantong');
   const [alokasiWaktu, setAlokasiWaktu] = useState('2 JP (2 x 35 Menit)');
-  const [gayaDesain, setGayaDesain] = useState('Modern & Clean (Indigo & Off-White)');
+  const [gayaDesain, setGayaDesain] = useState('Edukatif Profesional (Navy & Emerald)');
 
   // Mode V1 Specific States
   const [fase, setFase] = useState('B');
-  const [sintaks, setSintaks] = useState('Inquiry Learning (Penyelidikan Terbimbing)');
-  const [tujuanPembelajaran, setTujuanPembelajaran] = useState('Siswa dapat menganalisis hubungan antara bentuk serta fungsi bagian tubuh pada tumbuhan dengan benar.');
-  const [dimensiProfil, setDimensiProfil] = useState('Bernalar Kritis, Kreatif, dan Mandiri');
+  const [sintaks, setSintaks] = useState('Teaching Games for Understanding (TGfU) / Pendekatan Taktis Bermain');
+  const [tujuanPembelajaran, setTujuanPembelajaran] = useState('Peserta didik dapat menganalisis dan mempraktikkan variasi gerak dasar lokomotor (berlari, melompat) dan manipulatif (mengoper dan menghentikan bola) dengan koordinasi yang baik, disiplin, dan sportivitas di lapangan SD Negeri Kalimantong.');
+  const [dimensiProfil, setDimensiProfil] = useState('Gotong Royong, Mandiri, dan Bernalar Kritis');
 
   // Mode V2 Specific States
   const [kegiatanInti, setKegiatanInti] = useState(
-    '1. Siswa dibagi ke dalam kelompok kecil beranggotakan 4 orang.\n' +
-    '2. Setiap kelompok diberikan 3 jenis dedaunan berbeda dari tanaman di lingkungan sekolah.\n' +
-    '3. Menggunakan lup/kaca pembesar, siswa mengamati bentuk tulang daun (menyirip/menjari/melengkung/sejajar).\n' +
-    '4. Siswa mendiskusikan kaitan bentuk tulang daun dengan kekuatan fisik daun tersebut.\n' +
-    '5. Setiap kelompok menulis laporan singkat hasil investigasi pada kolom tabel pengamatan.'
+    '1. Pemanasan Game "Kucing Bola" di Lapangan SD Negeri Kalimantong (10 menit) untuk melatih reaksi gerak kaki.\n' +
+    '2. Demonstrasi Guru: Posisi kaki tumpu sejajar bola, perkenaan kaki bagian dalam, dan cara meredam bola dengan telapak kaki.\n' +
+    '3. Station 1 (Pos Akurasi): Latihan berpasangan passing mendatar 6 meter melewati celah 2 cone pembatas (10 kali pengulangan).\n' +
+    '4. Station 2 (Pos Kontrol): Siswa bergantian melambungkan dan mengontrol bola jatuh dengan punggung kaki dan paha.\n' +
+    '5. Mini Games Taktis (4 lawan 4): Bermain sepak bola mini tanpa kiper dengan aturan wajib 3 kali sentuhan sebelum menembak gawang.\n' +
+    '6. Pendinginan & Refleksi: Pelemasan otot tungkai kaki, diskusi kesalahan gerak yang sering muncul, dan pengisian LKPD.'
   );
 
   // Mode Raw Specific States (backward compatibility)
-  const [rawText, setRawText] = useState(`LEMBAR KERJA PESERTA DIDIK (LKPD)
-Mata Pelajaran: Ilmu Pengetahuan Alam dan Sosial (IPAS)
-Kelas: 4 SD
-Topik: Bagian Tubuh Tumbuhan dan Fungsinya
+  const [rawText, setRawText] = useState(`LEMBAR KERJA PESERTA DIDIK (LKPD) PJOK
+Mata Pelajaran: Pendidikan Jasmani, Olahraga, dan Kesehatan (PJOK)
+Satuan Pendidikan: SD Negeri Kalimantong
+Kelas / Fase: 4 SD / Fase B
+Materi Pokok: Kombinasi Gerak Lokomotor & Manipulatif Sepak Bola Mini
 
-Mari belajar bagian tubuh tumbuhan! Setiap tumbuhan memiliki bagian-bagian penting dengan tugas yang berbeda-beda.
+Aktivitas 1: Analisis Gerak Dasar Passing Kaki Bagian Dalam
+Saat melakukan operan bola mendatar, posisi kaki tumpu berada di samping bola sekitar 10-15 cm, lutut agak ditekuk, kaki tendang diayun dari belakang dengan pergelangan kaki diputar keluar.
 
-Aktivitas 1: Membaca & Mengamati
-Tumbuhan memiliki akar, batang, daun, bunga, dan buah.
-Akar berfungsi untuk menyerap air dan zat hara dari dalam tanah.
-Batang berfungsi untuk menyalurkan air dan zat makanan ke seluruh bagian tumbuhan serta menopang tubuh tumbuhan.
-Daun berfungsi sebagai tempat fotosintesis (pembuatan makanan bagi tumbuhan).
+Pertanyaan Analisis:
+1. Mengapa mengoper dengan kaki bagian dalam menghasilkan arah bola yang lebih akurat daripada menggunakan ujung jari sepatu?
+2. Bagaimana posisi badan dan kaki saat menerima operan bola agar bola tidak memantul jauh?
+3. Apa tindakan sportivitasmu jika teman satu tim salah mengoper bola saat pertandingan?
 
-Pertanyaan Pemahaman:
-1. Mengapa akar sangat penting bagi kehidupan sebuah pohon? Jelaskan pendapatmu!
-2. Apa yang akan terjadi jika batang suatu tumbuhan patah atau rusak?
+Aktivitas 2: Tabel Observasi Praktik Berpasangan di Lapangan SD Negeri Kalimantong
+Lakukan 10 kali operan berjarak 6 meter dan beri tanda centang pada lembar temanmu:
+No | Nama Teman | Kaki Tumpu di Samping Bola | Perkenaan Kaki Bagian Dalam | Akurasi Bola Sampai ke Teman
+1 | Ahmad Fauzi | Tepat | Tepat | Tepat
+2 | Budi Santoso | Tepat | Belum Tepat | Tepat
+3 | Candra Kirana | ... | ... | ...
 
-Ayo Mencocokkan! Hubungkan bagian tumbuhan dengan fungsinya yang benar:
-- Akar <--> Tempat fotosintesis / memasak makanan
-- Batang <--> Menyerap air dan zat hara tanah
-- Daun <--> Penyalur makanan dan penopang tanaman
+Ayo Pasangkan Istilah dan Fungsinya:
+- Menggiring (Dribbling) <--> Membawa bola melewati lawan ke ruang terbuka
+- Mengoper (Passing) <--> Membagi bola secara akurat ke teman satu regu
+- Mengontrol (Stopping) <--> Menghentikan dan menguasai laju bola
 
-Tabel Pengamatan Daun di Sekitar Sekolah:
-Isilah tabel berikut berdasarkan hasil pengamatan daun di halaman sekolahmu!
-No | Nama Tumbuhan | Bentuk Tulang Daun (Menyirip / Melengkung / Menjari) | Warna Daun
-1 | Daun Mangga | Menyirip | Hijau Tua
-2 | Daun Singkong | Menjari | Hijau Muda
-3 | Daun Pepaya | ... | ...
+Refleksi Diri:
+- Apakah saya sudah minum air putih yang cukup setelah berolahraga?
+- Bagian tubuh mana yang paling bekerja keras dan butuh pelemasan?`);
 
-Selamat belajar, anak-anak hebat!`);
+  // Presets states
+  const [selectedFaseFilter, setSelectedFaseFilter] = useState<'semua' | 'A' | 'B' | 'C'>('semua');
+  const [activePresetId, setActivePresetId] = useState<string>('pjok-sepakbola-k4');
+  const [presetToast, setPresetToast] = useState<string | null>(null);
 
-  // Status states
-  const [lkpdResult, setLkpdResult] = useState<InteractiveLkpdData | null>(null);
+  // Status states - initialize with pre-rendered PJOK SD Negeri Kalimantong worksheet
+  const [lkpdResult, setLkpdResult] = useState<InteractiveLkpdData | null>(DEFAULT_PJOK_KALIMANTONG_LKPD);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
 
   // Ref for the A4 sheet DOM element
   const lkpdContainerRef = useRef<HTMLDivElement>(null);
+
+  // Helper to apply preset
+  const handleApplyPreset = (preset: PjokLkpdPreset, immediatePreview: boolean = false) => {
+    setActivePresetId(preset.id);
+    setMataPelajaran(preset.mataPelajaran);
+    setKelas(preset.kelas);
+    setFase(preset.fase);
+    setTopikMateri(preset.topikMateri);
+    setSekolah(preset.sekolah);
+    setGuruPenyusun(preset.guruPenyusun);
+    setAlokasiWaktu(preset.alokasiWaktu);
+    setGayaDesain(preset.gayaDesain);
+    setSintaks(preset.sintaks);
+    setTujuanPembelajaran(preset.tujuanPembelajaran);
+    setDimensiProfil(preset.dimensiProfil);
+    setKegiatanInti(preset.kegiatanInti);
+    setRawText(preset.rawText);
+
+    if (immediatePreview) {
+      const generated = generateLkpdFromPreset(preset);
+      setLkpdResult(generated);
+      setPresetToast(`Materi "${preset.label}" langsung ditampilkan di kertas A4!`);
+    } else {
+      setPresetToast(`Data "${preset.label}" diterapkan ke formulir.`);
+    }
+
+    setTimeout(() => {
+      setPresetToast(null);
+    }, 4000);
+  };
 
   const handleGenerateLkpd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +277,42 @@ Selamat belajar, anak-anak hebat!`);
     downloadDocFile(`LKPD_${topikMateri.replace(/\s+/g, '_')}_Kelas_${kelas}.doc`, docHtml);
   };
 
+  const handleDownloadPdf = async () => {
+    if (!lkpdContainerRef.current || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const filename = `LKPD_${topikMateri.replace(/\s+/g, '_')}_Kelas_${kelas}`;
+      const success = await downloadElementAsPdf(lkpdContainerRef.current, filename, {
+        orientation: 'portrait',
+        scale: 2,
+        marginMm: 6
+      });
+      if (!success) {
+        if (lkpdResult) {
+          const docHtml = exportLkpdToDoc(lkpdResult);
+          printHtmlDocument(docHtml, `LKPD - ${topikMateri}`);
+        }
+      }
+    } catch (err) {
+      console.error('PDF export error:', err);
+      if (lkpdResult) {
+        const docHtml = exportLkpdToDoc(lkpdResult);
+        printHtmlDocument(docHtml, `LKPD - ${topikMateri}`);
+      }
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handlePrint = () => {
+    if (lkpdContainerRef.current) {
+      printHtmlDocument(lkpdContainerRef.current.innerHTML, `LKPD - ${topikMateri}`);
+    } else if (lkpdResult) {
+      const docHtml = exportLkpdToDoc(lkpdResult);
+      printHtmlDocument(docHtml, `LKPD - ${topikMateri}`);
+    }
+  };
+
   const handleDownloadImage = async () => {
     if (!lkpdContainerRef.current) return;
     setIsCapturing(true);
@@ -326,24 +415,216 @@ Selamat belajar, anak-anak hebat!`);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="lkpd-interactive-generator">
       {/* Header Panel */}
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl p-6 sm:p-8 text-white shadow-lg mb-8">
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-slate-800 rounded-2xl p-6 sm:p-8 text-white shadow-lg mb-6">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <span className="bg-emerald-500/30 text-emerald-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/40 flex items-center gap-1">
+            🏫 SD Negeri Kalimantong
+          </span>
+          <span className="bg-amber-500/30 text-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-amber-400/40 flex items-center gap-1">
+            ⚽ PJOK (Pendidikan Jasmani, Olahraga, dan Kesehatan)
+          </span>
+          <span className="bg-teal-500/30 text-teal-100 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-teal-400/40">
+            Kurikulum Merdeka (Fase A, B, & C)
+          </span>
+        </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex items-center gap-2.5">
           <FileText className="w-8 h-8 text-emerald-200" />
-          Desainer LKPD Bergambar & Interaktif (A4 Portrait)
+          Rancangan LKPD Gambar & Interaktif PJOK SD Negeri Kalimantong
         </h2>
         <p className="mt-2 text-emerald-100 max-w-3xl text-sm sm:text-base leading-relaxed">
-          Ubah Lembar Kerja Peserta Didik (LKPD) Anda yang membosankan menjadi dokumen bergambar, interaktif, rapi, dan modern berskala A4 Portrait. AI akan menyusun visual pendukung, kotak jawaban kreatif, bagan, kuis mencocokkan, serta checklist refleksi mandiri dengan <strong>mempertahankan 100% teks asli</strong> tanpa merusak materi Anda!
+          Rancang Lembar Kerja Peserta Didik (LKPD) PJOK bergambar dan interaktif berskala A4 Portrait khusus untuk pembelajaran di <strong>SD Negeri Kalimantong</strong>. Lengkap dengan analisis mekanika gerak, panduan keselamatan lapangan rumput, tabel observasi unjuk kerja teman sejawat, kuis mencocokkan taktis, dan refleksi gaya hidup sehat aktif.
         </p>
+      </div>
+
+      {/* Preset Feedback Toast Notification */}
+      {presetToast && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-sm animate-fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{presetToast}</span>
+          </div>
+          <button 
+            onClick={() => setPresetToast(null)} 
+            className="text-emerald-700 hover:text-emerald-900 text-xs px-2 py-1 rounded bg-emerald-100/80 cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+
+      {/* Katalog Materi Khusus PJOK SD Negeri Kalimantong */}
+      <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-5 sm:p-6 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base sm:text-lg font-bold text-slate-800">
+                Katalog Materi Khusus Pembelajaran PJOK di SD Negeri Kalimantong
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Pilih dari 9 paket materi PJOK berbasis Kurikulum Merdeka siap pakai atau sesuaikan dengan kebutuhan mengajar di lapangan sekolah.
+            </p>
+          </div>
+
+          {/* Filter Fase Buttons */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold self-start md:self-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedFaseFilter('semua')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                selectedFaseFilter === 'semua' 
+                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Semua ({PJOK_SD_PRESETS.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedFaseFilter('A')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                selectedFaseFilter === 'A' 
+                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Fase A (Kls 1-2)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedFaseFilter('B')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                selectedFaseFilter === 'B' 
+                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Fase B (Kls 3-4)
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedFaseFilter('C')}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                selectedFaseFilter === 'C' 
+                  ? 'bg-emerald-600 text-white shadow-xs' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Fase C (Kls 5-6)
+            </button>
+          </div>
+        </div>
+
+        {/* Preset Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
+          {PJOK_SD_PRESETS
+            .filter(p => selectedFaseFilter === 'semua' || p.fase === selectedFaseFilter)
+            .map((preset) => {
+              const isSelected = activePresetId === preset.id;
+              return (
+                <div 
+                  key={preset.id}
+                  className={`rounded-xl border p-4 transition-all flex flex-col justify-between ${
+                    isSelected 
+                      ? 'border-emerald-500 bg-emerald-50/30 ring-2 ring-emerald-400/40 shadow-sm' 
+                      : 'border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300 hover:shadow-sm'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
+                        preset.fase === 'A' 
+                          ? 'bg-teal-100 text-teal-800' 
+                          : preset.fase === 'B' 
+                            ? 'bg-emerald-100 text-emerald-800' 
+                            : 'bg-indigo-100 text-indigo-800'
+                      }`}>
+                        Fase {preset.fase} &bull; Kelas {preset.kelas} SD
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400 font-medium">
+                        {preset.alokasiWaktu}
+                      </span>
+                    </div>
+
+                    <h4 className="text-xs font-bold text-slate-900 leading-snug mb-1.5">
+                      {preset.label}
+                    </h4>
+
+                    <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed mb-3">
+                      {preset.topikMateri}
+                    </p>
+
+                    <div className="text-[10px] text-slate-500 bg-white border border-slate-200 rounded-md p-2 mb-3">
+                      <span className="font-bold text-slate-700">Model:</span> {preset.sintaks.split('/')[0]}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60">
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset(preset, true)}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-lg py-1.5 px-2 text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                      title="Muat langsung ke preview lembar kertas A4 siap cetak"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      ⚡ Tampilkan di A4
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyPreset(preset, false)}
+                      className="bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-300 text-slate-700 rounded-lg py-1.5 px-2.5 text-[11px] font-semibold transition cursor-pointer"
+                      title="Salin data ke kolom isian formulir"
+                    >
+                      Isi Form
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Form & Help */}
         <div className="lg:col-span-5 space-y-6">
           <div className="bg-white rounded-xl shadow-md p-6 border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-emerald-600" />
-              Formulir Rancang LKPD Interaktif
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-emerald-600" />
+                Formulir Rancang LKPD Interaktif
+              </h3>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                SD Negeri Kalimantong
+              </span>
+            </div>
+
+            {/* Quick Preset Selector Dropdown */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4">
+              <label className="block text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Trophy className="w-3.5 h-3.5 text-amber-600" />
+                  Pilih Preset Materi PJOK SD Negeri Kalimantong:
+                </span>
+                <span className="text-[10px] text-emerald-600 font-semibold">{PJOK_SD_PRESETS.length} Pilihan</span>
+              </label>
+              <select
+                value={activePresetId}
+                onChange={(e) => {
+                  const targetPreset = PJOK_SD_PRESETS.find(p => p.id === e.target.value);
+                  if (targetPreset) {
+                    handleApplyPreset(targetPreset, true);
+                  }
+                }}
+                className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700"
+              >
+                {PJOK_SD_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    [Kelas {p.kelas} - Fase {p.fase}] {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Mode Tabs Selector */}
             <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-lg mb-4 text-xs font-semibold text-slate-600">
@@ -750,9 +1031,27 @@ Selamat belajar, anak-anak hebat!`);
                 
                 <div className="flex flex-wrap gap-2.5">
                   <button
+                    onClick={handleDownloadPdf}
+                    disabled={isExportingPdf}
+                    className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    {isExportingPdf ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Memproses PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        Unduh PDF
+                      </>
+                    )}
+                  </button>
+
+                  <button
                     onClick={handleDownloadImage}
                     disabled={isCapturing}
-                    className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
                   >
                     {isCapturing ? (
                       <>
@@ -788,8 +1087,16 @@ Selamat belajar, anak-anak hebat!`);
                     onClick={handleDownloadDoc}
                     className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-lg font-bold transition shadow-sm cursor-pointer"
                   >
-                    <Download className="w-4 h-4" />
-                    Unduh Dokumen (.doc)
+                    <FileText className="w-4 h-4" />
+                    Unduh Word (.doc)
+                  </button>
+
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-3.5 py-2 rounded-lg font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-slate-500" />
+                    Cetak
                   </button>
                 </div>
               </div>

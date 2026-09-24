@@ -29,6 +29,7 @@ interface RekapNilaiTpViewProps {
   classes: ClassData[];
   selectedClassId: string;
   setSelectedClassId: (id: string) => void;
+  onUpdateStudents?: (classId: string, students: Student[]) => void;
 }
 
 // Preset TPs based on Grade to make the tool instantly useful
@@ -65,10 +66,21 @@ const GRADE_TP_PRESETS: { [grade: number]: { code: string; text: string }[] } = 
   ]
 };
 
-export default function RekapNilaiTpView({ classes, selectedClassId, setSelectedClassId }: RekapNilaiTpViewProps) {
+export default function RekapNilaiTpView({ classes, selectedClassId, setSelectedClassId, onUpdateStudents }: RekapNilaiTpViewProps) {
   const activeClass = useMemo(() => {
     return classes.find(c => c.id === selectedClassId) || classes[0] || { id: '', name: 'Tanpa Kelas', grade: 1, students: [] };
   }, [classes, selectedClassId]);
+
+  const handleToggleGender = (studentId: string) => {
+    if (!onUpdateStudents || !activeClass) return;
+    const updated = activeClass.students.map(s => {
+      if (s.id === studentId) {
+        return { ...s, gender: (s.gender === 'L' ? 'P' : 'L') as 'L' | 'P' };
+      }
+      return s;
+    });
+    onUpdateStudents(activeClass.id, updated);
+  };
 
   // Subject and school year configs
   const [subject, setSubject] = useState('Pendidikan Jasmani, Olahraga, dan Kesehatan');
@@ -879,8 +891,24 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
                         <td className="p-3 border-r border-slate-200 text-left font-extrabold text-slate-800">
                           {student.name}
                         </td>
-                        <td className="p-3 border-r border-slate-200 text-slate-500 font-bold">
-                          {student.gender}
+                        <td className="p-2 border-r border-slate-200 text-center font-bold">
+                          {onUpdateStudents ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleGender(student.id)}
+                              className={`px-2 py-0.5 rounded text-xs font-bold transition-all cursor-pointer no-print ${
+                                student.gender === 'L'
+                                  ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                              }`}
+                              title="Klik untuk mengubah jenis kelamin siswa (L <-> P)"
+                            >
+                              {student.gender}
+                            </button>
+                          ) : (
+                            <span className="no-print">{student.gender}</span>
+                          )}
+                          <span className="hidden print:inline font-bold">{student.gender}</span>
                         </td>
 
                         {/* Interactive dynamic TP scores inputs */}

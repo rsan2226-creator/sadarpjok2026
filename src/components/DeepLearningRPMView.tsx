@@ -1,36 +1,158 @@
 import React, { useState } from 'react';
-import { Sparkles, FileText, ClipboardCopy, FileDown, BookOpen, User, Users, CheckCircle2, AlertCircle, RefreshCw, Printer, ExternalLink } from 'lucide-react';
+import { Sparkles, FileText, ClipboardCopy, FileDown, BookOpen, User, Users, CheckCircle2, AlertCircle, RefreshCw, Printer, ExternalLink, Copy, Layers, Calendar, Clock, GraduationCap, School } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DeepLearningRPM } from '../types';
 import { exportRpmToDoc, downloadDocFile, copyAndOpenGoogleDocs, copyRichHtmlToClipboard } from '../lib/exportUtils';
+import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import { RPMTableSection, RPMLampiranSection, RPMLkpdSection } from './DeepLearningDocumentPreview';
+
+// Konfigurasi Jenjang, Kelas, dan Fase Kurikulum Merdeka
+type JenjangType = 'SD' | 'SMP' | 'SMA' | 'PAUD';
+
+const JENJANG_CONFIG: Array<{ id: JenjangType; label: string; badge: string; color: string }> = [
+  { id: 'SD', label: 'SD / MI', badge: 'Fase A, B, C', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+  { id: 'SMP', label: 'SMP / MTs', badge: 'Fase D', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { id: 'SMA', label: 'SMA / SMK', badge: 'Fase E & F', color: 'text-purple-700 bg-purple-50 border-purple-200' },
+  { id: 'PAUD', label: 'PAUD / TK', badge: 'Fase Fondasi', color: 'text-amber-700 bg-amber-50 border-amber-200' },
+];
+
+const KELAS_PRESETS: Record<JenjangType, Array<{ grade: string; label: string; fase: string; desc: string }>> = {
+  SD: [
+    { grade: '1', label: 'Kelas 1', fase: 'Fase A', desc: 'Kelas 1 SD (Fase A)' },
+    { grade: '2', label: 'Kelas 2', fase: 'Fase A', desc: 'Kelas 2 SD (Fase A)' },
+    { grade: '3', label: 'Kelas 3', fase: 'Fase B', desc: 'Kelas 3 SD (Fase B)' },
+    { grade: '4', label: 'Kelas 4', fase: 'Fase B', desc: 'Kelas 4 SD (Fase B)' },
+    { grade: '5', label: 'Kelas 5', fase: 'Fase C', desc: 'Kelas 5 SD (Fase C)' },
+    { grade: '6', label: 'Kelas 6', fase: 'Fase C', desc: 'Kelas 6 SD (Fase C)' },
+  ],
+  SMP: [
+    { grade: '7', label: 'Kelas 7', fase: 'Fase D', desc: 'Kelas 7 SMP (Fase D)' },
+    { grade: '8', label: 'Kelas 8', fase: 'Fase D', desc: 'Kelas 8 SMP (Fase D)' },
+    { grade: '9', label: 'Kelas 9', fase: 'Fase D', desc: 'Kelas 9 SMP (Fase D)' },
+  ],
+  SMA: [
+    { grade: '10', label: 'Kelas 10', fase: 'Fase E', desc: 'Kelas 10 SMA/SMK (Fase E)' },
+    { grade: '11', label: 'Kelas 11', fase: 'Fase F', desc: 'Kelas 11 SMA/SMK (Fase F)' },
+    { grade: '12', label: 'Kelas 12', fase: 'Fase F', desc: 'Kelas 12 SMA/SMK (Fase F)' },
+  ],
+  PAUD: [
+    { grade: 'PAUD', label: 'PAUD / TK', fase: 'Fase Fondasi', desc: 'PAUD/TK (Fase Fondasi)' },
+  ],
+};
+
+const ALL_KELAS_OPTIONS = [
+  { grade: 'PAUD', label: 'PAUD / TK (Fase Fondasi)', fase: 'Fase Fondasi', jenjang: 'PAUD' as JenjangType },
+  { grade: '1', label: 'Kelas 1 SD / MI (Fase A)', fase: 'Fase A', jenjang: 'SD' as JenjangType },
+  { grade: '2', label: 'Kelas 2 SD / MI (Fase A)', fase: 'Fase A', jenjang: 'SD' as JenjangType },
+  { grade: '3', label: 'Kelas 3 SD / MI (Fase B)', fase: 'Fase B', jenjang: 'SD' as JenjangType },
+  { grade: '4', label: 'Kelas 4 SD / MI (Fase B)', fase: 'Fase B', jenjang: 'SD' as JenjangType },
+  { grade: '5', label: 'Kelas 5 SD / MI (Fase C)', fase: 'Fase C', jenjang: 'SD' as JenjangType },
+  { grade: '6', label: 'Kelas 6 SD / MI (Fase C)', fase: 'Fase C', jenjang: 'SD' as JenjangType },
+  { grade: '7', label: 'Kelas 7 SMP / MTs (Fase D)', fase: 'Fase D', jenjang: 'SMP' as JenjangType },
+  { grade: '8', label: 'Kelas 8 SMP / MTs (Fase D)', fase: 'Fase D', jenjang: 'SMP' as JenjangType },
+  { grade: '9', label: 'Kelas 9 SMP / MTs (Fase D)', fase: 'Fase D', jenjang: 'SMP' as JenjangType },
+  { grade: '10', label: 'Kelas 10 SMA / SMK (Fase E)', fase: 'Fase E', jenjang: 'SMA' as JenjangType },
+  { grade: '11', label: 'Kelas 11 SMA / SMK (Fase F)', fase: 'Fase F', jenjang: 'SMA' as JenjangType },
+  { grade: '12', label: 'Kelas 12 SMA / SMK (Fase F)', fase: 'Fase F', jenjang: 'SMA' as JenjangType },
+];
+
+const ALL_FASES = [
+  { value: 'Fase Fondasi', label: 'Fase Fondasi (PAUD / TK)' },
+  { value: 'Fase A', label: 'Fase A (SD Kelas 1 - 2)' },
+  { value: 'Fase B', label: 'Fase B (SD Kelas 3 - 4)' },
+  { value: 'Fase C', label: 'Fase C (SD Kelas 5 - 6)' },
+  { value: 'Fase D', label: 'Fase D (SMP Kelas 7 - 9)' },
+  { value: 'Fase E', label: 'Fase E (SMA/SMK Kelas 10)' },
+  { value: 'Fase F', label: 'Fase F (SMA/SMK Kelas 11 - 12)' },
+];
 
 export function DeepLearningRPMView() {
-  // Input fields state
-  const [grade, setGrade] = useState('');
+  // Jenjang, Kelas & Fase states
+  const [jenjang, setJenjang] = useState<JenjangType>('SMP');
+  const [grade, setGrade] = useState('7');
+  const [fase, setFase] = useState('Fase D');
+  const [isCustomGrade, setIsCustomGrade] = useState(false);
+  const [customGradeText, setCustomGradeText] = useState('');
+
+  // Other Input fields state
   const [materi, setMateri] = useState('');
   const [penyusun, setPenyusun] = useState('');
   const [sekolah, setSekolah] = useState('');
-  const [tahunAjaran, setTahunAjaran] = useState('');
+  const [tahunAjaran, setTahunAjaran] = useState('2025/2026');
   const [semester, setSemester] = useState('1');
   const [mataPelajaran, setMataPelajaran] = useState('');
   const [bab, setBab] = useState('');
-  const [alokasiWaktu, setAlokasiWaktu] = useState('');
+  const [jumlahPertemuan, setJumlahPertemuan] = useState('2');
+  const [alokasiWaktu, setAlokasiWaktu] = useState('4 × 35 Menit (2 Pertemuan)');
   const [konteksTambahan, setKonteksTambahan] = useState('');
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [rpmResult, setRpmResult] = useState<DeepLearningRPM | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const [activeTab, setActiveTab] = useState<'rpm' | 'lampiran' | 'lkpd'>('rpm');
+  const [activeTab, setActiveTab] = useState<'rpm' | 'lampiran' | 'lkpd' | 'all'>('rpm');
   const [selectedLkpdIndex, setSelectedLkpdIndex] = useState(0);
   const [copiedStatus, setCopiedStatus] = useState(false);
+  const [copiedTextStatus, setCopiedTextStatus] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   // Validation
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
+  const handleSelectJenjang = (newJenjang: JenjangType) => {
+    setJenjang(newJenjang);
+    setIsCustomGrade(false);
+    const presets = KELAS_PRESETS[newJenjang];
+    if (presets && presets.length > 0) {
+      setGrade(presets[0].grade);
+      setFase(presets[0].fase);
+    }
+    if (errors.grade) setErrors({ ...errors, grade: '' });
+  };
+
+  const handleSelectGrade = (newGrade: string, newFase: string, newJenjang?: JenjangType) => {
+    setGrade(newGrade);
+    setFase(newFase);
+    if (newJenjang) setJenjang(newJenjang);
+    setIsCustomGrade(false);
+    if (errors.grade) setErrors({ ...errors, grade: '' });
+  };
+
+  const handleSelectDropdownGrade = (selectedGradeValue: string) => {
+    const item = ALL_KELAS_OPTIONS.find((k) => k.grade === selectedGradeValue);
+    if (item) {
+      setGrade(item.grade);
+      setFase(item.fase);
+      setJenjang(item.jenjang);
+      setIsCustomGrade(false);
+    }
+    if (errors.grade) setErrors({ ...errors, grade: '' });
+  };
+
+  const handleJumlahPertemuanChange = (val: string) => {
+    setJumlahPertemuan(val);
+    const count = parseInt(val) || 2;
+    setAlokasiWaktu(`${count * 2} × 35 Menit (${count} Pertemuan)`);
+  };
+
+  const getEffectiveGradeText = () => {
+    if (isCustomGrade) return customGradeText;
+    if (grade === 'PAUD') return 'PAUD / TK';
+    return `Kelas ${grade}`;
+  };
+
+  const getEffectiveKelasFaseFormatted = () => {
+    const effGrade = getEffectiveGradeText();
+    if (effGrade.toLowerCase().includes('fase')) {
+      return effGrade;
+    }
+    return `${effGrade} / ${fase}`;
+  };
+
   const validateForm = () => {
     const tempErrors: { [key: string]: string } = {};
-    if (!grade.trim()) tempErrors.grade = 'Kelas wajib diisi';
+    const effectiveGrade = isCustomGrade ? customGradeText.trim() : grade.trim();
+    if (!effectiveGrade) tempErrors.grade = 'Kelas wajib dipilih / diisi';
     if (!materi.trim()) tempErrors.materi = 'Materi/Topik wajib diisi';
     if (!penyusun.trim()) tempErrors.penyusun = 'Nama Penyusun wajib diisi';
     if (!sekolah.trim()) tempErrors.sekolah = 'Nama Sekolah wajib diisi';
@@ -49,13 +171,16 @@ export function DeepLearningRPMView() {
       return;
     }
 
+    const effectiveGrade = isCustomGrade ? customGradeText.trim() : grade;
+
     setLoading(true);
     try {
       const response = await fetch('/api/generate-rpm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          grade,
+          grade: effectiveGrade,
+          fase,
           materi,
           penyusun,
           sekolah,
@@ -63,6 +188,7 @@ export function DeepLearningRPMView() {
           semester,
           mataPelajaran,
           bab,
+          jumlahPertemuan,
           alokasiWaktu,
           konteksTambahan
         })
@@ -75,6 +201,7 @@ export function DeepLearningRPMView() {
 
       const data = await response.json();
       setRpmResult(data);
+      setSelectedLkpdIndex(0);
     } catch (err: any) {
       console.error(err);
       setErrorMessage(err.message || 'Gagal menyusun RPM. Pastikan kunci API Gemini Anda valid.');
@@ -96,26 +223,67 @@ export function DeepLearningRPMView() {
   const handleDownloadDoc = () => {
     if (!rpmResult) return;
     const docHtml = exportRpmToDoc(rpmResult);
-    const filename = `RPM_${rpmResult.identitas.mataPelajaran}_Kelas_${rpmResult.identitas.kelasFase}_${rpmResult.identitas.topik.replace(/\s+/g, '_')}`;
+    const filename = `RPM_${rpmResult.identitas.mataPelajaran || 'Mapel'}_Kelas_${rpmResult.identitas.kelasFase || 'Fase'}_${(rpmResult.identitas.topik || 'Topik').replace(/\s+/g, '_')}`;
     downloadDocFile(filename, docHtml);
   };
 
+  const handleDownloadPdf = async () => {
+    if (!rpmResult || exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const docHtml = exportRpmToDoc(rpmResult);
+      const filename = `RPM_${rpmResult.identitas.mataPelajaran || 'Mapel'}_Kelas_${rpmResult.identitas.kelasFase || 'Fase'}_${(rpmResult.identitas.topik || 'Topik').replace(/\s+/g, '_')}`;
+      const success = await downloadHtmlAsPdf(filename, docHtml, {
+        title: `RPM & LKPD - ${rpmResult.identitas.mataPelajaran || 'Mata Pelajaran'}`,
+        orientation: 'portrait'
+      });
+      
+      if (!success) {
+        printHtmlDocument(docHtml, `RPM & LKPD - ${rpmResult.identitas.mataPelajaran || 'Mata Pelajaran'}`);
+      }
+    } catch (err) {
+      console.error('PDF export error:', err);
+      const docHtml = exportRpmToDoc(rpmResult);
+      printHtmlDocument(docHtml, `RPM & LKPD - ${rpmResult.identitas.mataPelajaran || 'Mata Pelajaran'}`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handlePrintDocument = () => {
+    if (!rpmResult) return;
+    const docHtml = exportRpmToDoc(rpmResult);
+    printHtmlDocument(docHtml, `Cetak RPM & LKPD - ${rpmResult.identitas.mataPelajaran || 'Mata Pelajaran'}`);
+  };
+
+  const handleCopyFullText = async () => {
+    if (!rpmResult) return;
+    const docHtml = exportRpmToDoc(rpmResult);
+    const success = await copyRichHtmlToClipboard(docHtml);
+    if (success) {
+      setCopiedTextStatus(true);
+      setTimeout(() => setCopiedTextStatus(false), 3000);
+    }
+  };
+
+  const currentLkpdCount = rpmResult?.lkpdList?.length || parseInt(jumlahPertemuan) || 2;
+
   return (
     <div className="space-y-6">
-      {/* Header section */}
-      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
+      {/* Header section (Hidden on print) */}
+      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm no-print">
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
           <Sparkles className="w-6 h-6 text-indigo-500 animate-pulse" />
           Pembelajaran Mendalam (Deep Learning) - RPM & LKPD
         </h1>
         <p className="text-slate-500 mt-1 text-sm max-w-3xl">
-          Rancang Rencana Pembelajaran Mendalam (RPM) bersintaks terstruktur dan Lembar Kerja Peserta Didik (LKPD) mandiri bermakna (mindful, meaningful, joyful) untuk 8 pertemuan penuh secara instan dengan kecerdasan Gemini.
+          Rancang Rencana Pembelajaran Mendalam (RPM) bersintaks terstruktur dan Lembar Kerja Peserta Didik (LKPD) mandiri bermakna (mindful, meaningful, joyful) dengan penyesuaian Kelas, Fase Kurikulum Merdeka, dan Jumlah Pertemuan secara instan.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Input Form Column (Left) */}
-        <div className="lg:col-span-4 space-y-6">
+        {/* Input Form Column (Left - Hidden on print) */}
+        <div className="lg:col-span-4 space-y-6 no-print">
           <form onSubmit={handleGenerate} className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-sm space-y-4">
             <h2 className="text-lg font-semibold text-slate-800 border-b pb-3 flex items-center gap-2">
               <User className="w-5 h-5 text-indigo-600" />
@@ -162,39 +330,173 @@ export function DeepLearningRPMView() {
               {errors.sekolah && <p className="text-rose-500 text-xs mt-1">{errors.sekolah}</p>}
             </div>
 
-            {/* Grid 2 Columns for small fields */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Kelas/Fase <span className="text-rose-500">*</span>
+            {/* PENGATURAN KELAS & FASE (KURIKULUM MERDEKA) */}
+            <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-indigo-600" />
+                  Kelas & Fase Kurikulum Merdeka <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={grade}
-                  onChange={(e) => {
-                    setGrade(e.target.value);
-                    if (errors.grade) setErrors({ ...errors, grade: '' });
-                  }}
-                  className={`w-full text-sm border px-3 py-2 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all ${
-                    errors.grade ? 'border-rose-400 focus:ring-rose-500/20' : 'border-slate-200'
-                  }`}
-                  placeholder="Contoh: 7"
-                />
-                {errors.grade && <p className="text-rose-500 text-xs mt-1">{errors.grade}</p>}
+                <button
+                  type="button"
+                  onClick={() => setIsCustomGrade(!isCustomGrade)}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium hover:underline"
+                >
+                  {isCustomGrade ? '← Mode Pilihan Cepat' : 'Kustom / Manual'}
+                </button>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Mata Pelajaran
-                </label>
-                <input
-                  type="text"
-                  value={mataPelajaran}
-                  onChange={(e) => setMataPelajaran(e.target.value)}
-                  className="w-full text-sm border border-slate-200 px-3 py-2 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                  placeholder="Contoh: Matematika"
-                />
+              {!isCustomGrade ? (
+                <>
+                  {/* Tab Jenjang Pendidikan */}
+                  <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/60 rounded-lg">
+                    {JENJANG_CONFIG.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleSelectJenjang(item.id)}
+                        className={`py-1.5 text-xs font-semibold rounded-md transition-all text-center ${
+                          jenjang === item.id
+                            ? 'bg-white text-indigo-900 shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/50'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tombol Cepat Kelas Sesuai Jenjang */}
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] font-medium text-slate-500 flex items-center justify-between">
+                      <span>Pilih Kelas:</span>
+                      <span className="text-[10px] text-indigo-600 font-semibold">
+                        {JENJANG_CONFIG.find((j) => j.id === jenjang)?.badge}
+                      </span>
+                    </div>
+                    <div className={`grid ${jenjang === 'SD' ? 'grid-cols-3' : jenjang === 'SMP' || jenjang === 'SMA' ? 'grid-cols-3' : 'grid-cols-1'} gap-1.5`}>
+                      {KELAS_PRESETS[jenjang].map((preset) => {
+                        const isSelected = grade === preset.grade;
+                        return (
+                          <button
+                            key={preset.grade}
+                            type="button"
+                            onClick={() => handleSelectGrade(preset.grade, preset.fase, jenjang)}
+                            className={`p-2 text-xs rounded-lg border transition-all text-left flex flex-col items-center justify-center gap-0.5 ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                            }`}
+                          >
+                            <span className="font-bold">{preset.label}</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
+                              isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {preset.fase}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Dropdown Kelas & Fase Terkoordinasi */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Pilih Kelas:
+                      </label>
+                      <select
+                        value={grade}
+                        onChange={(e) => handleSelectDropdownGrade(e.target.value)}
+                        className="w-full text-xs border border-slate-200 bg-white px-2 py-1.5 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        {ALL_KELAS_OPTIONS.map((k) => (
+                          <option key={k.grade} value={k.grade}>
+                            {k.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Fase Capaian:
+                      </label>
+                      <select
+                        value={fase}
+                        onChange={(e) => setFase(e.target.value)}
+                        className="w-full text-xs border border-slate-200 bg-white px-2 py-1.5 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        {ALL_FASES.map((f) => (
+                          <option key={f.value} value={f.value}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Mode Kustom / Manual */
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      Ketik Kelas Kustom <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={customGradeText}
+                      onChange={(e) => {
+                        setCustomGradeText(e.target.value);
+                        if (errors.grade) setErrors({ ...errors, grade: '' });
+                      }}
+                      className="w-full text-xs border border-slate-200 px-3 py-2 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      placeholder="Contoh: Kelas 7 Unggulan atau Kelas 4"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      Pilih Fase:
+                    </label>
+                    <select
+                      value={fase}
+                      onChange={(e) => setFase(e.target.value)}
+                      className="w-full text-xs border border-slate-200 bg-white px-2.5 py-2 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    >
+                      {ALL_FASES.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Status Banner Format Terpilih */}
+              <div className="flex items-center justify-between px-2.5 py-1.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs">
+                <span className="text-slate-600 text-[11px]">Format Identitas Dokumen:</span>
+                <span className="font-bold text-indigo-900 text-[11px]">
+                  {getEffectiveKelasFaseFormatted()}
+                </span>
               </div>
+              {errors.grade && <p className="text-rose-500 text-xs mt-1">{errors.grade}</p>}
+            </div>
+
+            {/* Mata Pelajaran */}
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Mata Pelajaran
+              </label>
+              <input
+                type="text"
+                value={mataPelajaran}
+                onChange={(e) => setMataPelajaran(e.target.value)}
+                className="w-full text-sm border border-slate-200 px-3 py-2 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                placeholder="Contoh: Matematika / PJOK / IPA"
+              />
             </div>
 
             {/* Bab & Topik */}
@@ -238,6 +540,53 @@ export function DeepLearningRPMView() {
               </div>
             </div>
 
+            {/* Fitur: Berapa Kali Pertemuan Mengajar */}
+            <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100/90 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                  Berapa Kali Pertemuan Mengajar?
+                </label>
+                <span className="text-[11px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200 shadow-2xs">
+                  {jumlahPertemuan} Pertemuan
+                </span>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+                {['1', '2', '3', '4', '6', '8'].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleJumlahPertemuanChange(num)}
+                    className={`py-1 px-1 text-xs font-semibold rounded-md border transition-all text-center ${
+                      jumlahPertemuan === num
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {num}x
+                  </button>
+                ))}
+              </div>
+
+              {/* Dropdown for specific meeting count */}
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-[11px] text-indigo-900 font-medium whitespace-nowrap">Pilih Jumlah Lain:</span>
+                <select
+                  value={jumlahPertemuan}
+                  onChange={(e) => handleJumlahPertemuanChange(e.target.value)}
+                  className="w-full text-xs border border-indigo-200 bg-white px-2.5 py-1.5 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  {Array.from({ length: 16 }, (_, i) => (i + 1).toString()).map((n) => (
+                    <option key={n} value={n}>
+                      {n} Kali Pertemuan (Menghasilkan {n} LKPD & Sintaks)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {/* Tahun Ajaran, Semester, Alokasi Waktu */}
             <div className="grid grid-cols-3 gap-2">
               <div>
@@ -249,7 +598,7 @@ export function DeepLearningRPMView() {
                   value={tahunAjaran}
                   onChange={(e) => setTahunAjaran(e.target.value)}
                   className="w-full text-xs border border-slate-200 px-2 py-2 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                  placeholder="2026/2027"
+                  placeholder="2025/2026"
                 />
               </div>
 
@@ -268,15 +617,15 @@ export function DeepLearningRPMView() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Alokasi Waktu
+                <label className="block text-xs font-medium text-slate-600 mb-1 flex items-center justify-between">
+                  <span>Alokasi Waktu</span>
                 </label>
                 <input
                   type="text"
                   value={alokasiWaktu}
                   onChange={(e) => setAlokasiWaktu(e.target.value)}
                   className="w-full text-xs border border-slate-200 px-2 py-2 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                  placeholder="16x40 Menit"
+                  placeholder="2 × 35 Menit"
                 />
               </div>
             </div>
@@ -311,12 +660,12 @@ export function DeepLearningRPMView() {
               {loading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                  Menganalisis & Menyusun...
+                  Menyusun {jumlahPertemuan} Pertemuan...
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-indigo-400" />
-                  Susun Perencanaan Mendalam
+                  Susun RPM & {jumlahPertemuan} LKPD
                 </>
               )}
             </button>
@@ -339,384 +688,229 @@ export function DeepLearningRPMView() {
         </div>
 
         {/* Output Column (Right) */}
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-8 print-sheet">
           <AnimatePresence mode="wait">
             {loading ? (
               <motion.div
                 key="loading-stage"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="bg-white rounded-xl border border-slate-200 p-12 shadow-sm text-center flex flex-col items-center justify-center space-y-4 min-h-[450px]"
+                exit={{ opacity: 0, y: -15 }}
+                className="bg-white rounded-xl border border-slate-200/80 p-12 text-center shadow-sm space-y-4"
               >
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full border-4 border-slate-100 border-t-indigo-600 animate-spin"></div>
-                  <Sparkles className="w-6 h-6 text-indigo-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-bounce" />
+                <div className="relative inline-flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-full bg-indigo-50 border-2 border-indigo-200 animate-pulse flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-indigo-600 animate-spin" />
+                  </div>
                 </div>
-                <div className="space-y-1 max-w-md">
-                  <h3 className="font-semibold text-slate-800 text-lg">Menyusun Rencana & LKPD Terbaik</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Kecerdasan AI sedang memetakan desain pembelajaran mendalam untuk 8 pertemuan penuh secara detail, membuat tabel komponen, rubrik penilaian, materi ajar, serta 8 bundel LKPD utuh...
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Menyusun Dokumen Deep Learning ({jumlahPertemuan} Pertemuan)...
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    AI sedang merancang Rencana Pembelajaran Mendalam (RPM) berkesadaran, bermakna, menggembirakan beserta {jumlahPertemuan} bundel LKPD mandiri untuk {getEffectiveKelasFaseFormatted()}.
                   </p>
+                </div>
+                <div className="inline-flex items-center gap-2 bg-indigo-50/70 border border-indigo-100 px-3 py-1.5 rounded-full text-xs text-indigo-700 font-medium">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Mengintegrasikan 8 Dimensi Profil Lulusan & Sintaks Pembelajaran...
                 </div>
               </motion.div>
             ) : rpmResult ? (
               <motion.div
-                key="output-stage"
-                initial={{ opacity: 0, y: 15 }}
+                key="result-stage"
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
+                className="space-y-4"
               >
-                {/* Export & Action Panel */}
-                <div className="bg-slate-900 rounded-xl p-4 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-slate-800 p-2.5 rounded-lg border border-slate-700">
-                      <FileText className="w-5 h-5 text-indigo-400" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">Dokumen Pembelajaran Terbentuk</h3>
-                      <p className="text-xs text-slate-400">Pilih opsi ekspor di samping untuk menyimpan atau menyunting.</p>
+                {/* Actions & Export Toolbar (Hidden on print) */}
+                <div className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 no-print">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-700">Tampilan:</span>
+                    <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('rpm')}
+                        className={`px-3 py-1 rounded-md font-medium transition-all ${
+                          activeTab === 'rpm'
+                            ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Tabel RPM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('lampiran')}
+                        className={`px-3 py-1 rounded-md font-medium transition-all ${
+                          activeTab === 'lampiran'
+                            ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Lampiran Lengkap
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('lkpd')}
+                        className={`px-3 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+                          activeTab === 'lkpd'
+                            ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <span>Bundel LKPD</span>
+                        <span className="bg-indigo-100 text-indigo-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                          {currentLkpdCount}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('all')}
+                        className={`px-3 py-1 rounded-md font-medium transition-all ${
+                          activeTab === 'all'
+                            ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Semua Bagian
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    {/* Clipboard copy + Docs redirect (Requested feature) */}
+                  {/* Export Buttons */}
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
+                      type="button"
                       onClick={handleCopyToClipboardAndOpenDocs}
-                      disabled={copiedStatus}
-                      className="flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-medium text-xs px-3.5 py-2 rounded-lg flex items-center justify-center gap-2 transition-all shadow-sm"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-all shadow-2xs"
                     >
-                      <ClipboardCopy className="w-4 h-4 text-indigo-200" />
-                      {copiedStatus ? 'Tersalin & Membuka Docs...' : 'Salin & Buka Google Dokumen'}
+                      {copiedStatus ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ExternalLink className="w-3.5 h-3.5" />}
+                      {copiedStatus ? 'Tersalin & Membuka Docs...' : 'Google Docs'}
                     </button>
 
-                    {/* Standard .doc Download */}
                     <button
+                      type="button"
                       onClick={handleDownloadDoc}
-                      className="flex-1 sm:flex-initial bg-slate-800 hover:bg-slate-700 active:scale-[0.98] border border-slate-700 text-slate-200 font-medium text-xs px-3.5 py-2 rounded-lg flex items-center justify-center gap-2 transition-all"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all shadow-2xs"
                     >
-                      <FileDown className="w-4 h-4 text-slate-400" />
-                      Unduh Berkas .Doc
+                      <FileDown className="w-3.5 h-3.5" />
+                      Unduh Word (.doc)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      disabled={exportingPdf}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-all shadow-2xs disabled:opacity-50"
+                    >
+                      {exportingPdf ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                      {exportingPdf ? 'Mengekspor...' : 'Cetak PDF'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handlePrintDocument}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-all shadow-2xs"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Cetak
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyFullText}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all shadow-2xs"
+                    >
+                      {copiedTextStatus ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedTextStatus ? 'Tersalin!' : 'Salin Semua'}
                     </button>
                   </div>
                 </div>
 
-                {/* Sub-Tabs for RPM Result Preview */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="flex border-b border-slate-200 bg-slate-50/70 p-1">
-                    <button
-                      onClick={() => setActiveTab('rpm')}
-                      className={`flex-1 sm:flex-initial py-2 px-4 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                        activeTab === 'rpm'
-                          ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
-                          : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900'
-                      }`}
-                    >
-                      <FileText className="w-4 h-4 text-slate-400" />
-                      Tabel RPP (A-E)
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('lampiran')}
-                      className={`flex-1 sm:flex-initial py-2 px-4 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                        activeTab === 'lampiran'
-                          ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
-                          : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900'
-                      }`}
-                    >
-                      <BookOpen className="w-4 h-4 text-slate-400" />
-                      Lampiran Dokumen
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('lkpd')}
-                      className={`flex-1 sm:flex-initial py-2 px-4 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                        activeTab === 'lkpd'
-                          ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
-                          : 'text-slate-600 hover:bg-slate-200/50 hover:text-slate-900'
-                      }`}
-                    >
-                      <Users className="w-4 h-4 text-slate-400" />
-                      Lembar Kerja (LKPD) Siswa
-                    </button>
+                {/* Specific Meeting Selector Sub-tab if activeTab === 'lkpd' (Hidden on print) */}
+                {activeTab === 'lkpd' && rpmResult.lkpdList && rpmResult.lkpdList.length > 1 && (
+                  <div className="bg-white rounded-xl border border-indigo-100 p-3 shadow-xs flex items-center justify-between gap-3 no-print">
+                    <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-indigo-600" />
+                      Pilih Lembar LKPD Pertemuan:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {rpmResult.lkpdList.map((_, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => setSelectedLkpdIndex(pIdx)}
+                          className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all ${
+                            selectedLkpdIndex === pIdx
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-indigo-50'
+                          }`}
+                        >
+                          LKPD Pertemuan {pIdx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Document Main Preview Section */}
+                <div className="space-y-6">
+                  {/* Title banner */}
+                  <div className="bg-white p-6 rounded-xl border border-slate-300 shadow-xs text-center space-y-1">
+                    <h2 className="text-lg font-black text-slate-900 tracking-wide uppercase">
+                      {rpmResult.title || 'PERENCANAAN PEMBELAJARAN MENDALAM'}
+                    </h2>
+                    <p className="text-xs font-semibold text-indigo-800">
+                      {rpmResult.identitas.mataPelajaran || 'Mata Pelajaran'} &bull; {rpmResult.identitas.kelasFase || 'Kelas / Fase'} &bull; {rpmResult.identitas.alokasiWaktu || 'Alokasi Waktu'}
+                    </p>
                   </div>
 
-                  <div className="p-6">
-                    {/* Tab 1: RPM Table Content */}
-                    {activeTab === 'rpm' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between border-b pb-2">
-                          <h3 className="font-bold text-slate-800 text-base">Tabel Rencana Pelaksanaan Pembelajaran</h3>
-                          <span className="text-xs text-slate-400 italic">Format Tabel Dua Kolom</span>
-                        </div>
+                  {/* Render based on selected activeTab */}
+                  {(activeTab === 'rpm' || activeTab === 'all') && (
+                    <RPMTableSection rpm={rpmResult} />
+                  )}
 
-                        <div className="overflow-x-auto rounded-lg border border-slate-200">
-                          <table className="w-full border-collapse text-left">
-                            <thead>
-                              <tr className="bg-slate-900 text-white text-xs uppercase font-semibold">
-                                <th className="w-1/3 px-4 py-3 border border-slate-200">Komponen / Sub-komponen</th>
-                                <th className="w-2/3 px-4 py-3 border border-slate-200">Isi Perencanaan Pembelajaran</th>
-                              </tr>
-                            </thead>
-                            <tbody className="text-xs text-slate-700 divide-y divide-slate-200">
-                              {/* IDENTITAS CATEGORY */}
-                              <tr className="bg-slate-50 font-bold text-slate-900">
-                                <td colSpan={2} className="px-4 py-2.5 border border-slate-200 bg-indigo-50/40 text-indigo-900">A. IDENTITAS</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Penyusun</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.penyusun}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Sekolah</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.sekolah}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Tahun Ajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.tahunAjaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Semester</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.semester === '1' ? 'I (Ganjil)' : 'II (Genap)'}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Mata Pelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.mataPelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Kelas / Fase Capaian</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">Kelas {rpmResult.identitas.kelasFase}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Bab</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.bab}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Topik</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.topik}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Alokasi Waktu</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identitas.alokasiWaktu}</td>
-                              </tr>
+                  {(activeTab === 'lampiran' || activeTab === 'all') && (
+                    <RPMLampiranSection rpm={rpmResult} />
+                  )}
 
-                              {/* IDENTIFIKASI CATEGORY */}
-                              <tr className="bg-slate-50 font-bold text-slate-900">
-                                <td colSpan={2} className="px-4 py-2.5 border border-slate-200 bg-indigo-50/40 text-indigo-900">B. IDENTIFIKASI</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Identifikasi Murid</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.identifikasi.identifikasiMurid}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Materi Pelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.identifikasi.materiPelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Dimensi Profil Lulusan</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.identifikasi.dimensiProfilLulusan}</td>
-                              </tr>
-
-                              {/* DESAIN PEMBELAJARAN CATEGORY */}
-                              <tr className="bg-slate-50 font-bold text-slate-900">
-                                <td colSpan={2} className="px-4 py-2.5 border border-slate-200 bg-indigo-50/40 text-indigo-900">C. DESAIN PEMBELAJARAN</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Capaian Pembelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.desainPembelajaran.capaianPembelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Lintas Disiplin Ilmu</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.desainPembelajaran.lintasDisiplinIlmu}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Tujuan Pembelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.desainPembelajaran.tujuanPembelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Topik Pembelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.desainPembelajaran.topikPembelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Praktik Pedagogis</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.desainPembelajaran.praktikPedagogis}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Kemitraan Pembelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.desainPembelajaran.kemitraanPembelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Lingkungan Pembelajaran</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.desainPembelajaran.lingkunganPembelajaran}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Pemanfaatan Digital</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800">{rpmResult.desainPembelajaran.pemanfaatanDigital}</td>
-                              </tr>
-
-                              {/* PENGALAMAN BELAJAR CATEGORY */}
-                              <tr className="bg-slate-50 font-bold text-slate-900">
-                                <td colSpan={2} className="px-4 py-2.5 border border-slate-200 bg-indigo-50/40 text-indigo-900">D. PENGALAMAN BELAJAR</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Kegiatan Awal</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.pengalamanBelajar.kegiatanAwal}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Kegiatan Inti (8 Pertemuan)</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed font-sans">{rpmResult.pengalamanBelajar.kegiatanInti}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Kegiatan Penutup</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed">{rpmResult.pengalamanBelajar.kegiatanPenutup}</td>
-                              </tr>
-
-                              {/* ASESMEN PEMBELAJARAN CATEGORY */}
-                              <tr className="bg-slate-50 font-bold text-slate-900">
-                                <td colSpan={2} className="px-4 py-2.5 border border-slate-200 bg-indigo-50/40 text-indigo-900">E. ASESMEN PEMBELAJARAN</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Asesmen Awal</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap">{rpmResult.asesmenPembelajaran.awal}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Asesmen Proses</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap">{rpmResult.asesmenPembelajaran.proses}</td>
-                              </tr>
-                              <tr>
-                                <td className="px-4 py-3 border border-slate-200 font-semibold bg-slate-50/40">Asesmen Akhir</td>
-                                <td className="px-4 py-3 border border-slate-200 text-slate-800 whitespace-pre-wrap">{rpmResult.asesmenPembelajaran.akhir}</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {/* Signatures view */}
-                        <div className="grid grid-cols-2 gap-6 pt-6 border-t mt-4 text-center text-xs">
-                          <div className="space-y-12">
-                            <p className="text-slate-500">Mengetahui,</p>
-                            <p className="font-bold text-slate-800 text-sm">Kepala Sekolah</p>
-                            <div className="pt-6">
-                              <p className="font-bold text-slate-900 underline">{rpmResult.tandaTangan.kepalaSekolah}</p>
-                              <p className="text-slate-400">NIP. _______________________</p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-12">
-                            <p className="text-slate-500">Jakarta, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                            <p className="font-bold text-slate-800 text-sm">Guru Mata Pelajaran</p>
-                            <div className="pt-6">
-                              <p className="font-bold text-slate-900 underline">{rpmResult.tandaTangan.guruMapel}</p>
-                              <p className="text-slate-400">NIP. _______________________</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Tab 2: Lampiran Documents Content */}
-                    {activeTab === 'lampiran' && (
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between border-b pb-2">
-                          <h3 className="font-bold text-slate-800 text-base">Berkas Lampiran RPM</h3>
-                        </div>
-
-                        {/* Section 1: Asesmen Awal */}
-                        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-3">
-                          <h4 className="font-bold text-indigo-900 text-sm border-b pb-1.5">1. Asesmen Awal Pembelajaran</h4>
-                          <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
-                            {rpmResult.lampiran.asesmenAwal}
-                          </div>
-                        </div>
-
-                        {/* Section 2: Asesmen Proses */}
-                        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-3">
-                          <h4 className="font-bold text-indigo-900 text-sm border-b pb-1.5">2. Asesmen Proses Pembelajaran (Skala Rubrik)</h4>
-                          <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
-                            {rpmResult.lampiran.asesmenProses}
-                          </div>
-                        </div>
-
-                        {/* Section 3: Asesmen Akhir */}
-                        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-3">
-                          <h4 className="font-bold text-indigo-900 text-sm border-b pb-1.5">3. Asesmen Akhir Pembelajaran</h4>
-                          <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
-                            {rpmResult.lampiran.asesmenAkhir}
-                          </div>
-                        </div>
-
-                        {/* Section 4: Materi Ajar */}
-                        <div className="bg-slate-50 p-5 rounded-xl border border-slate-200/60 space-y-3">
-                          <h4 className="font-bold text-indigo-900 text-sm border-b pb-1.5">4. Materi Ajar Utama</h4>
-                          <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans">
-                            {rpmResult.lampiran.materiAjar}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Tab 3: LKPD Content */}
-                    {activeTab === 'lkpd' && (
-                      <div className="space-y-6">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-3 gap-2">
-                          <h3 className="font-bold text-slate-800 text-base">Bundel Lembar Kerja Peserta Didik (LKPD)</h3>
-                          <p className="text-xs text-slate-400 italic">Terdiri atas 8 Pertemuan Utuh Mandiri</p>
-                        </div>
-
-                        {/* Horizontal buttons for LKPD meetings Selection */}
-                        <div className="flex flex-wrap gap-1.5 border-b pb-3">
-                          {rpmResult.lkpdList.map((lkpd, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setSelectedLkpdIndex(idx)}
-                              className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-                                selectedLkpdIndex === idx
-                                  ? 'bg-slate-900 text-white shadow-sm'
-                                  : 'bg-slate-100 hover:bg-slate-200/75 text-slate-600'
-                              }`}
-                            >
-                              Pertemuan {idx + 1}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Active LKPD item display */}
-                        <AnimatePresence mode="wait">
-                          <motion.div
-                            key={selectedLkpdIndex}
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -10 }}
-                            className="bg-slate-50/50 p-6 rounded-xl border border-slate-200 shadow-inner space-y-4"
-                          >
-                            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-                              <h4 className="text-base font-bold text-slate-800">
-                                {rpmResult.lkpdList[selectedLkpdIndex]?.title || `LKPD Pertemuan ${selectedLkpdIndex + 1}`}
-                              </h4>
-                              <span className="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
-                                SINTAKS INTEGRATIF
-                              </span>
-                            </div>
-
-                            {/* Complete LKPD markup style with non-table structured view */}
-                            <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-sans bg-white p-5 rounded-lg border border-slate-100 shadow-sm">
-                              {rpmResult.lkpdList[selectedLkpdIndex]?.content}
-                            </div>
-                          </motion.div>
-                        </AnimatePresence>
-                      </div>
-                    )}
-                  </div>
+                  {(activeTab === 'lkpd' || activeTab === 'all') && (
+                    <RPMLkpdSection
+                      rpm={rpmResult}
+                      selectedIndex={activeTab === 'lkpd' ? selectedLkpdIndex : undefined}
+                    />
+                  )}
                 </div>
               </motion.div>
             ) : (
-              <div className="bg-slate-50 border-2 border-dashed border-slate-200/80 rounded-xl p-12 text-center flex flex-col items-center justify-center space-y-4 min-h-[450px]">
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-                  <FileText className="w-10 h-10 text-slate-400" />
+              /* Empty state before generating */
+              <div className="bg-white rounded-xl border border-slate-200/80 p-12 text-center shadow-sm space-y-4">
+                <div className="w-16 h-16 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto">
+                  <FileText className="w-8 h-8 text-indigo-500" />
                 </div>
-                <div className="space-y-1.5 max-w-sm">
-                  <h3 className="font-semibold text-slate-800 text-sm">Menunggu Parameter Input</h3>
+                <div className="space-y-1.5 max-w-md mx-auto">
+                  <h3 className="text-base font-bold text-slate-800">
+                    Formulir Generator RPM & LKPD Siap Dikelola
+                  </h3>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Tentukan nama penyusun, sekolah, mata pelajaran, bab, dan topik di panel kiri, lalu klik tombol susun untuk merakit modul RPM.
+                    Silakan tentukan Jenjang, Kelas, Fase Kurikulum Merdeka, Bab, Topik, serta Jumlah Pertemuan Mengajar pada formulir di sebelah kiri, kemudian klik tombol <strong>"Susun RPM"</strong>.
                   </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg mx-auto pt-4 text-left">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="text-xs font-bold text-slate-800">1. Kelas & Fase Akurat</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Pemetaan otomatis Fase A s/d F & Fondasi sesuai Kurikulum Merdeka.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="text-xs font-bold text-slate-800">2. Fleksibel Pertemuan</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Menghasilkan sintaks & LKPD lengkap dari 1 hingga 16 pertemuan.</p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="text-xs font-bold text-slate-800">3. Siap Ekspor & Cetak</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Langsung unduh dalam format Word (.doc), Google Docs, PDF, atau cetak.</p>
+                  </div>
                 </div>
               </div>
             )}

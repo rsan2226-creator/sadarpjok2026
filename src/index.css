@@ -36,11 +36,11 @@
     }
 
     /* Target standard document sheet containers to render nicely as A4 pages */
-    .lg\:col-span-8, .lg\:col-span-7, .lg\:col-span-12, #printable-modul, .print-area {
+    .lg\:col-span-8, .lg\:col-span-7, .lg\:col-span-12, #printable-modul, .print-area, .print-sheet {
       width: 100% !important;
       max-width: 100% !important;
       margin: 0 !important;
-      padding: 1.2cm !important;
+      padding: 1cm !important;
       border: none !important;
       box-shadow: none !important;
       background: white !important;

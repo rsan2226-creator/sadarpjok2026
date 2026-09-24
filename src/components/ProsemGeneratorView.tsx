@@ -10,10 +10,12 @@ import {
   ClipboardList,
   CalendarDays,
   Download,
-  FileText
+  FileText,
+  Printer
 } from 'lucide-react';
 import { ProsemData } from '../types';
 import { downloadDocFile, copyAndOpenGoogleDocs, exportProsemToDoc } from '../lib/exportUtils';
+import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
 export default function ProsemGeneratorView() {
   // Input states
@@ -42,6 +44,7 @@ export default function ProsemGeneratorView() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Auto-set Fase based on Kelas
   const handleKelasChange = (val: string) => {
@@ -136,6 +139,34 @@ export default function ProsemGeneratorView() {
     if (!prosemResult) return;
     const docHtml = exportProsemToDoc(prosemResult);
     downloadDocFile(`PROSEM_${mataPelajaran.replace(/\s+/g, '_')}_Kelas_${kelas}.doc`, docHtml);
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!prosemResult || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const docHtml = exportProsemToDoc(prosemResult);
+      const filename = `PROSEM_${mataPelajaran.replace(/\s+/g, '_')}_Kelas_${kelas}`;
+      const success = await downloadHtmlAsPdf(filename, docHtml, {
+        title: `Program Semester - ${mataPelajaran}`,
+        orientation: 'landscape'
+      });
+      if (!success) {
+        printHtmlDocument(docHtml, `PROSEM - ${mataPelajaran}`);
+      }
+    } catch (err) {
+      console.error(err);
+      const docHtml = exportProsemToDoc(prosemResult);
+      printHtmlDocument(docHtml, `PROSEM - ${mataPelajaran}`);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const handlePrint = () => {
+    if (!prosemResult) return;
+    const docHtml = exportProsemToDoc(prosemResult);
+    printHtmlDocument(docHtml, `PROSEM - ${mataPelajaran}`);
   };
 
   // Render a single semester table in UI preview
@@ -468,11 +499,28 @@ export default function ProsemGeneratorView() {
                   </button>
 
                   <button
+                    onClick={handleDownloadPdf}
+                    disabled={isExportingPdf}
+                    className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs px-4 py-2.5 rounded-lg font-bold transition shadow-sm cursor-pointer disabled:opacity-75"
+                  >
+                    <Download className="w-4 h-4 text-white" />
+                    <span>{isExportingPdf ? 'Memproses PDF...' : 'Unduh PDF'}</span>
+                  </button>
+
+                  <button
                     onClick={handleDownloadDoc}
                     className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2.5 rounded-lg font-bold transition shadow-sm cursor-pointer"
                   >
-                    <Download className="w-4 h-4" />
-                    Unduh Dokumen Word (.doc)
+                    <FileText className="w-4 h-4" />
+                    Unduh Word (.doc)
+                  </button>
+
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-4 py-2.5 rounded-lg font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-slate-500" />
+                    Cetak
                   </button>
                 </div>
               </div>

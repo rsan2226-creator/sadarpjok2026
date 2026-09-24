@@ -12,9 +12,11 @@ import {
   X,
   AlertCircle,
   Printer,
-  Copy
+  Copy,
+  Download
 } from 'lucide-react';
 import { exportRubrikToDoc, downloadDocFile } from '../lib/exportUtils';
+import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
 interface RubrikFisikViewProps {
   rubriks: RubrikFisik[];
@@ -29,6 +31,7 @@ export default function RubrikFisikView({ rubriks, onAddRubrik, onDeleteRubrik }
   const [apiError, setApiError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // Form State
   const [materiInput, setMateriInput] = useState('');
@@ -250,7 +253,35 @@ export default function RubrikFisikView({ rubriks, onAddRubrik, onDeleteRubrik }
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">Gunakan rubrik kriteria ini untuk mengevaluasi gerak fisik secara presisi dan objektif.</p>
               </div>
-              <div className="flex items-center gap-2 shrink-0 no-print">
+              <div className="flex flex-wrap items-center gap-2 shrink-0 no-print">
+                <button
+                  disabled={isExportingPdf}
+                  onClick={async () => {
+                    if (!activeRubrik || isExportingPdf) return;
+                    setIsExportingPdf(true);
+                    try {
+                      const docContent = exportRubrikToDoc(activeRubrik);
+                      const filename = `Rubrik_PJOK_${activeRubrik.materi.replace(/\s+/g, '_')}`;
+                      const success = await downloadHtmlAsPdf(filename, docContent, {
+                        title: `Rubrik Penilaian Motorik - ${activeRubrik.materi}`,
+                        orientation: 'portrait'
+                      });
+                      if (!success) {
+                        printHtmlDocument(docContent, `Rubrik Penilaian - ${activeRubrik.materi}`);
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      const docContent = exportRubrikToDoc(activeRubrik);
+                      printHtmlDocument(docContent, `Rubrik Penilaian - ${activeRubrik.materi}`);
+                    } finally {
+                      setIsExportingPdf(false);
+                    }
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-75"
+                >
+                  <Download className="w-3.5 h-3.5 text-rose-600" />
+                  {isExportingPdf ? 'Memproses PDF...' : 'Unduh PDF'}
+                </button>
                 <button
                   onClick={() => {
                     const docContent = exportRubrikToDoc(activeRubrik);
@@ -261,13 +292,16 @@ export default function RubrikFisikView({ rubriks, onAddRubrik, onDeleteRubrik }
                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                 >
                   {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-emerald-600" />}
-                  {isCopied ? 'Dokumen Diunduh!' : 'Ekspor Google Docs'}
+                  {isCopied ? 'Dokumen Diunduh!' : 'Unduh .Doc'}
                 </button>
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    const docContent = exportRubrikToDoc(activeRubrik);
+                    printHtmlDocument(docContent, `Rubrik Penilaian - ${activeRubrik.materi}`);
+                  }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                 >
-                  <Printer className="w-3.5 h-3.5 text-slate-500" /> Cetak / PDF
+                  <Printer className="w-3.5 h-3.5 text-slate-500" /> Cetak
                 </button>
               </div>
             </div>

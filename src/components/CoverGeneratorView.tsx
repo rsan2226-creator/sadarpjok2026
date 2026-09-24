@@ -21,7 +21,7 @@ import {
   MapPin,
   FileSignature
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { copyAndOpenGoogleDocs, downloadDocFile } from '../lib/exportUtils';
 
 export interface CoverData {

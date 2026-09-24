@@ -275,29 +275,65 @@ export interface DeepLearningRPM {
     semester: string;
     mataPelajaran: string;
     kelasFase: string;
-    bab: string;
-    topik: string;
+    topikElemen?: string;
+    bab?: string;
+    topik?: string;
     alokasiWaktu: string;
+    jumlahPertemuan?: number | string;
+    kelas?: string;
+    fase?: string;
   };
   identifikasi: {
-    identifikasiMurid: string;
-    materiPelajaran: string;
-    dimensiProfilLulusan: string;
+    muridOps: string;
+    materiPelajaranOps: string;
+    dimensiProfilLulusan: string[];
+    identifikasiMurid?: string;
+    materiPelajaran?: string;
   };
   desainPembelajaran: {
-    capaianPembelajaran: string;
-    lintasDisiplinIlmu: string;
+    capaianPembelajaranOps: string;
+    lintasDisiplinIlmuOps: string;
     tujuanPembelajaran: string;
-    topikPembelajaran: string;
+    topikPembelajaranOps: string;
     praktikPedagogis: string;
-    kemitraanPembelajaran: string;
+    kemitraanPembelajaranOps: string;
     lingkunganPembelajaran: string;
-    pemanfaatanDigital: string;
+    pemanfaatanDigitalOps: string;
+    capaianPembelajaran?: string;
+    lintasDisiplinIlmu?: string;
+    topikPembelajaran?: string;
+    kemitraanPembelajaran?: string;
+    pemanfaatanDigital?: string;
   };
   pengalamanBelajar: {
-    kegiatanAwal: string;
-    kegiatanInti: string;
-    kegiatanPenutup: string;
+    langkahPembelajaran: {
+      awalOps: {
+        prinsip: string;
+        deskripsi: string;
+      };
+      inti: {
+        prinsipUmum: string;
+        memahami: {
+          prinsip: string;
+          kegiatan: string[];
+        };
+        mengaplikasi: {
+          prinsip: string;
+          kegiatan: string[];
+        };
+        merefleksi: {
+          prinsip: string;
+          kegiatan: string[];
+        };
+      };
+      penutupOps: {
+        prinsip: string;
+        deskripsi: string;
+      };
+    };
+    kegiatanAwal?: string;
+    kegiatanInti?: string;
+    kegiatanPenutup?: string;
   };
   asesmenPembelajaran: {
     awal: string;
@@ -305,16 +341,87 @@ export interface DeepLearningRPM {
     akhir: string;
   };
   tandaTangan: {
-    kepalaSekolah: string;
-    guruMapel: string;
+    tempatTanggal?: string;
+    kepalaSekolah: {
+      nama: string;
+      nip: string;
+    } | string;
+    guruMapel: {
+      nama: string;
+      nip: string;
+    } | string;
   };
   lampiran: {
-    asesmenAwal: string;
-    asesmenProses: string;
-    asesmenAkhir: string;
-    materiAjar: string;
+    asesmenDiagnostikNonKognitif?: {
+      tujuan: string;
+      pertanyaan: { no: number; teks: string }[];
+    };
+    asesmenFormatif?: {
+      keterangan: {
+        diskusi: string;
+        presentasi: string;
+        unjukKerja: string;
+      };
+      rubrikPenilaian: { skor: number; deskripsi: string }[];
+    };
+    penilaianSikap?: {
+      spiritual: {
+        teknik: string;
+        instrumen: string;
+        indikator: string[];
+      };
+      sosial: {
+        teknik: string;
+        instrumen: string;
+        indikator: string[];
+      };
+      keterangan: string;
+      rumusNilai: string;
+    };
+    penilaianPengetahuan?: {
+      judul: string;
+      aspekList: string[];
+      pedomanSkor: {
+        aspek: string;
+        skor4: string;
+        skor3: string;
+        skor2: string;
+        skor1: string;
+      }[];
+      rumusNilai: string;
+    };
+    penilaianKeterampilan?: {
+      judul: string;
+      aspekList: string[];
+      pedomanSkor: {
+        aspek: string;
+        skor4: string;
+        skor3: string;
+        skor2: string;
+        skor1: string;
+      }[];
+      rumusNilai: string;
+    };
+    pengayaanDanRemedial?: {
+      remedial: {
+        tujuan: string;
+        strategi: { nama: string; deskripsi: string }[];
+      };
+      pengayaan: {
+        tujuan: string;
+        strategi: { nama: string; deskripsi: string }[];
+      };
+    };
+    refleksi?: {
+      guru: { no: number; aspek: string; refleksiGuru: string; jawaban?: string }[];
+      pesertaDidik: string;
+    };
+    asesmenAwal?: string;
+    asesmenProses?: string;
+    asesmenAkhir?: string;
+    materiAjar?: string;
   };
-  lkpdList: {
+  lkpdList?: {
     pertemuan: string;
     title: string;
     content: string;
@@ -322,7 +429,7 @@ export interface DeepLearningRPM {
 }
 
 export interface LkpdContentBlock {
-  blockType: 'text' | 'question' | 'table' | 'matching' | 'highlight';
+  blockType: 'text' | 'question' | 'table' | 'matching' | 'highlight' | 'illustrationPrompt' | 'pjokVisual';
   exactText?: string;
   questionData?: {
     id: string;
@@ -344,6 +451,12 @@ export interface LkpdContentBlock {
     }[];
   };
   illustrationPrompt?: string;
+  visualType?: 'sepakbola' | 'voli' | 'basket' | 'kasti' | 'senam' | 'atletik' | 'kebugaran' | 'renang' | 'gobaksodor' | 'silat';
+  visualCaption?: string;
+  visualDetails?: {
+    label: string;
+    desc: string;
+  }[];
 }
 
 export interface LkpdSection {

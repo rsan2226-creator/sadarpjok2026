@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ClassData, ModulAjar, JurnalMengajar, RubrikFisik } from '../types';
 import { 
   Printer, 
@@ -11,8 +11,11 @@ import {
   User, 
   Check, 
   Info,
-  Award
+  Award,
+  Download,
+  Loader2
 } from 'lucide-react';
+import { downloadElementAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
 interface CetakLaporanViewProps {
   classes: ClassData[];
@@ -46,6 +49,8 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
   // Print Settings Options
   const [showKop, setShowKop] = useState(true);
   const [showSignatures, setShowSignatures] = useState(true);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const printAreaRef = useRef<HTMLDivElement>(null);
 
   // Active object finders
   const activeClass = classes.find(c => c.id === selectedClassId) || classes[0];
@@ -58,8 +63,38 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
     return j.classId === jurnalClassId;
   });
 
+  const handleDownloadPdf = async () => {
+    if (!printAreaRef.current || isExportingPdf) return;
+    setIsExportingPdf(true);
+    try {
+      const filename = `Laporan_${docType.toUpperCase()}_${schoolName.replace(/\s+/g, '_')}_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}`;
+      const success = await downloadElementAsPdf(printAreaRef.current, filename, {
+        orientation: 'portrait',
+        marginMm: 8,
+        scale: 2
+      });
+
+      if (!success) {
+        if (printAreaRef.current) {
+          printHtmlDocument(printAreaRef.current.innerHTML, `Laporan ${docType.toUpperCase()}`);
+        }
+      }
+    } catch (err) {
+      console.error('PDF export error:', err);
+      if (printAreaRef.current) {
+        printHtmlDocument(printAreaRef.current.innerHTML, `Laporan ${docType.toUpperCase()}`);
+      }
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const handlePrint = () => {
-    window.print();
+    if (printAreaRef.current) {
+      printHtmlDocument(printAreaRef.current.innerHTML, `Cetak Administrasi & Laporan PJOK - ${docType.toUpperCase()}`);
+    } else {
+      window.print();
+    }
   };
 
   return (
@@ -77,13 +112,33 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
           </p>
         </div>
 
-        <button
-          onClick={handlePrint}
-          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-md shadow-emerald-500/10 hover:shadow-lg hover:shadow-emerald-500/15 transition-all cursor-pointer shrink-0"
-        >
-          <Printer className="w-4 h-4" />
-          Cetak Dokumen Sekarang (PDF / Kertas)
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isExportingPdf}
+            className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs px-5 py-3 rounded-xl shadow-md shadow-rose-500/10 hover:shadow-lg hover:shadow-rose-500/15 transition-all cursor-pointer shrink-0 disabled:opacity-75"
+          >
+            {isExportingPdf ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Memproses PDF...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span>Unduh PDF</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold text-xs px-5 py-3 rounded-xl shadow-md shadow-emerald-500/10 hover:shadow-lg hover:shadow-emerald-500/15 transition-all cursor-pointer shrink-0"
+          >
+            <Printer className="w-4 h-4" />
+            Cetak Dokumen
+          </button>
+        </div>
       </div>
 
       {/* Main Grid View */}
@@ -400,6 +455,7 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
 
           {/* Realistic A4 page container */}
           <div 
+            ref={printAreaRef}
             className="print-area bg-white text-black p-[2cm] w-full max-w-[210mm] min-h-[297mm] shadow-xl border border-slate-200/60 rounded-sm font-serif overflow-hidden relative break-words"
             style={{ fontSize: '12px', lineHeight: '1.5' }}
           >

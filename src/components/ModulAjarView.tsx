@@ -18,6 +18,7 @@ import {
   Copy
 } from 'lucide-react';
 import { exportModulToDoc, downloadDocFile } from '../lib/exportUtils';
+import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
 interface ModulAjarViewProps {
   moduls: ModulAjar[];
@@ -32,6 +33,7 @@ export default function ModulAjarView({ moduls, onAddModul, onDeleteModul }: Mod
   const [apiError, setApiError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   // AI Form state
   const [aiMateri, setAiMateri] = useState('');
@@ -491,7 +493,35 @@ export default function ModulAjarView({ moduls, onAddModul, onDeleteModul }: Mod
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  disabled={isExportingPdf}
+                  onClick={async () => {
+                    if (!activeModul || isExportingPdf) return;
+                    setIsExportingPdf(true);
+                    try {
+                      const docContent = exportModulToDoc(activeModul);
+                      const filename = `Modul_Ajar_PJOK_${activeModul.materiPokok.replace(/\s+/g, '_')}_Kelas_${activeModul.grade}`;
+                      const success = await downloadHtmlAsPdf(filename, docContent, {
+                        title: `Modul Ajar PJOK - ${activeModul.materiPokok}`,
+                        orientation: 'portrait'
+                      });
+                      if (!success) {
+                        printHtmlDocument(docContent, `Modul Ajar - ${activeModul.materiPokok}`);
+                      }
+                    } catch (err) {
+                      console.error(err);
+                      const docContent = exportModulToDoc(activeModul);
+                      printHtmlDocument(docContent, `Modul Ajar - ${activeModul.materiPokok}`);
+                    } finally {
+                      setIsExportingPdf(false);
+                    }
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-75"
+                >
+                  <Download className="w-4 h-4 text-rose-600" />
+                  {isExportingPdf ? 'Memproses PDF...' : 'Unduh PDF'}
+                </button>
                 <button
                   onClick={() => {
                     const docContent = exportModulToDoc(activeModul);
@@ -502,13 +532,16 @@ export default function ModulAjarView({ moduls, onAddModul, onDeleteModul }: Mod
                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                 >
                   {isCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-emerald-600" />}
-                  {isCopied ? 'Dokumen Diunduh!' : 'Ekspor Google Docs'}
+                  {isCopied ? 'Dokumen Diunduh!' : 'Unduh .Doc'}
                 </button>
                 <button
-                  onClick={printModul}
+                  onClick={() => {
+                    const docContent = exportModulToDoc(activeModul);
+                    printHtmlDocument(docContent, `Modul Ajar PJOK - ${activeModul.materiPokok}`);
+                  }}
                   className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
-                  <Printer className="w-4 h-4 text-slate-500" /> Cetak RPP / PDF
+                  <Printer className="w-4 h-4 text-slate-500" /> Cetak
                 </button>
               </div>
             </div>
