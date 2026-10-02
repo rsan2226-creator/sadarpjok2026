@@ -14,8 +14,11 @@ import {
   Printer
 } from 'lucide-react';
 import { ProsemData } from '../types';
-import { downloadDocFile, copyAndOpenGoogleDocs, exportProsemToDoc } from '../lib/exportUtils';
+import { downloadDocFile, copyAndOpenGoogleDocs, exportProsemToDoc, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getProtaProsemPrompts } from '../utils/aiPromptGenerators';
 
 export default function ProsemGeneratorView() {
   // Input states
@@ -45,6 +48,7 @@ export default function ProsemGeneratorView() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Auto-set Fase based on Kelas
   const handleKelasChange = (val: string) => {
@@ -498,6 +502,23 @@ export default function ProsemGeneratorView() {
                     )}
                   </button>
 
+                  <ExportJsonPromptAiButtons
+                    variant="compact"
+                    onExportJson={() => {
+                      downloadJsonFile(`PROSEM_PJOK_Kelas_${kelas}_${tahunPelajaran.replace(/\//g, '-')}`, {
+                        mataPelajaran,
+                        kelas,
+                        fase,
+                        tahunPelajaran,
+                        alokasiWaktuTiapMinggu,
+                        protaContent,
+                        hasilProsem: prosemResult,
+                        tanggalEkspor: new Date().toISOString()
+                      });
+                    }}
+                    onOpenPromptAi={() => setShowPromptModal(true)}
+                  />
+
                   <button
                     onClick={handleDownloadPdf}
                     disabled={isExportingPdf}
@@ -577,6 +598,32 @@ export default function ProsemGeneratorView() {
           )}
         </div>
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Program Semester (PROSEM) PJOK"
+        subtitle={`Kelas ${kelas} (Fase ${fase}) • Tahun Ajaran ${tahunPelajaran}`}
+        tabs={getProtaProsemPrompts('prosem', {
+          kelas,
+          fase,
+          tahunPelajaran,
+          alokasiWaktuTiapMinggu,
+          protaContent
+        })}
+        jsonData={{
+          mataPelajaran,
+          kelas,
+          fase,
+          tahunPelajaran,
+          alokasiWaktuTiapMinggu,
+          protaContent,
+          hasilProsem: prosemResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`PROSEM_PJOK_Kelas_${kelas}_${tahunPelajaran.replace(/\//g, '-')}`}
+      />
     </div>
   );
 }

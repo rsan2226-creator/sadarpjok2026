@@ -14,9 +14,12 @@ import {
   FileText
 } from 'lucide-react';
 import { ProtaData } from '../types';
-import { downloadDocFile, copyAndOpenGoogleDocs, exportProtaToDoc } from '../lib/exportUtils';
+import { downloadDocFile, copyAndOpenGoogleDocs, exportProtaToDoc, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 import { fetchWithRetry } from '../lib/fetchUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getProtaProsemPrompts } from '../utils/aiPromptGenerators';
 
 export default function ProtaGeneratorView() {
   // Input states
@@ -52,6 +55,7 @@ export default function ProtaGeneratorView() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Auto-set Fase based on Kelas
   const handleKelasChange = (val: string) => {
@@ -540,6 +544,29 @@ export default function ProtaGeneratorView() {
                   )}
                 </button>
 
+                <ExportJsonPromptAiButtons
+                  variant="compact"
+                  onExportJson={() => {
+                    downloadJsonFile(`PROTA_PJOK_Kelas_${kelas}_${tahunPelajaran.replace(/\//g, '-')}`, {
+                      rentangProgram,
+                      mataPelajaran,
+                      kelas,
+                      fase,
+                      tahunPelajaran,
+                      totalJp2Semester,
+                      alokasiWaktuTiapMinggu,
+                      semester1Weeks,
+                      semester2Weeks,
+                      babSemester1,
+                      babSemester2,
+                      tujuanPembelajaranRaw,
+                      hasilProta: protaResult,
+                      tanggalEkspor: new Date().toISOString()
+                    });
+                  }}
+                  onOpenPromptAi={() => setShowPromptModal(true)}
+                />
+
                 <button
                   onClick={handleDownloadPdf}
                   disabled={isExportingPdf}
@@ -693,6 +720,38 @@ export default function ProtaGeneratorView() {
         )}
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Program Tahunan (PROTA) PJOK"
+        subtitle={`Kelas ${kelas} (Fase ${fase}) • Tahun Ajaran ${tahunPelajaran}`}
+        tabs={getProtaProsemPrompts('prota', {
+          kelas,
+          fase,
+          tahunPelajaran,
+          rentangProgram,
+          babSemester1,
+          babSemester2
+        })}
+        jsonData={{
+          rentangProgram,
+          mataPelajaran,
+          kelas,
+          fase,
+          tahunPelajaran,
+          totalJp2Semester,
+          alokasiWaktuTiapMinggu,
+          semester1Weeks,
+          semester2Weeks,
+          babSemester1,
+          babSemester2,
+          tujuanPembelajaranRaw,
+          hasilProta: protaResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`PROTA_PJOK_Kelas_${kelas}_${tahunPelajaran.replace(/\//g, '-')}`}
+      />
     </div>
   );
 }

@@ -728,6 +728,598 @@ export function exportRekapBulananToDoc(activeClass: ClassData, meta: RekapBulan
   return wrapWithLandscapeDocShell(`Rekap_Absensi_${activeClass.name.replace(/\s+/g, '_')}_${namaBulan}_${meta.tahun}`, content);
 }
 
+export interface PjokWeekMeeting {
+  weekNum: number;
+  date: string;
+  topic: string;
+  venue?: string;
+  executionStatus?: 'Terlaksana' | 'Teori Kelas' | 'Ujian Praktik' | 'Libur';
+}
+
+export interface PjokStudentWeeklyRecord {
+  status: 'H' | 'S' | 'I' | 'A';
+  uniform: boolean; // Kaos + Celana Training + Sepatu
+  physicalNote?: string; // e.g. "Bugar", "Dispensasi", "Asma", "Cedera"
+}
+
+export interface AbsensiMingguanPjokMeta {
+  bulan: number; // 1 - 12
+  tahun: number; // e.g. 2026
+  namaSekolah?: string;
+  namaGuru?: string;
+  nipGuru?: string;
+  namaKepalaSekolah?: string;
+  nipKepalaSekolah?: string;
+  kota?: string;
+  dayOfWeekName?: string; // e.g. "Selasa"
+  meetings: PjokWeekMeeting[];
+  weeklyRecords: {
+    [studentId: string]: {
+      [weekNum: number]: PjokStudentWeeklyRecord;
+    };
+  };
+  studentNotes?: {
+    [studentId: string]: string;
+  };
+}
+
+/**
+ * 3c. Exports Weekly PJOK Attendance (Presensi Mingguan Khusus Guru PJOK) to Microsoft Word format (Landscape)
+ */
+export function exportAbsensiMingguanPjokToDoc(activeClass: ClassData, meta: AbsensiMingguanPjokMeta): string {
+  const BULAN_NAMES = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  const bulanIdx = Math.max(1, Math.min(12, meta.bulan)) - 1;
+  const namaBulan = BULAN_NAMES[bulanIdx];
+  const tahunAjaran = meta.bulan >= 7 
+    ? `${meta.tahun}/${meta.tahun + 1}` 
+    : `${meta.tahun - 1}/${meta.tahun}`;
+
+  const namaSekolah = meta.namaSekolah || 'SD NEGERI HARAPAN BANGSA';
+  const namaGuru = meta.namaGuru || 'Ahmad Rafsanjani, S.Pd.';
+  const nipGuru = meta.nipGuru || '19880512 201503 1 002';
+  const namaKepalaSekolah = meta.namaKepalaSekolah || 'H. Muhammad Nur, M.Pd.';
+  const nipKepalaSekolah = meta.nipKepalaSekolah || '19750814 199903 1 004';
+  const kota = meta.kota || 'Jakarta';
+
+  const boysCount = (activeClass.students || []).filter(s => s.gender === 'L').length;
+  const girlsCount = (activeClass.students || []).filter(s => s.gender === 'P').length;
+
+  const meetings = meta.meetings || [];
+  const meetingCount = meetings.length;
+
+  let grandTotalH = 0;
+  let grandTotalS = 0;
+  let grandTotalI = 0;
+  let grandTotalA = 0;
+  let grandTotalUniform = 0;
+  let totalOpportunities = 0;
+
+  // Build Table Rows
+  const studentRows = (activeClass.students || []).map((student, sIdx) => {
+    let studentH = 0;
+    let studentS = 0;
+    let studentI = 0;
+    let studentA = 0;
+    let studentUniformCount = 0;
+
+    const weekCells = meetings.map(m => {
+      const rec = meta.weeklyRecords?.[student.id]?.[m.weekNum] || { status: 'H', uniform: true };
+      const status = rec.status || 'H';
+      const isUniform = rec.uniform !== false;
+
+      if (status === 'H') {
+        studentH++;
+        grandTotalH++;
+      } else if (status === 'S') {
+        studentS++;
+        grandTotalS++;
+      } else if (status === 'I') {
+        studentI++;
+        grandTotalI++;
+      } else if (status === 'A') {
+        studentA++;
+        grandTotalA++;
+      }
+
+      if (isUniform && status === 'H') {
+        studentUniformCount++;
+        grandTotalUniform++;
+      }
+      totalOpportunities++;
+
+      let statusBg = '#f0fdf4';
+      let statusColor = '#166534';
+      if (status === 'S') { statusBg = '#eff6ff'; statusColor = '#1d4ed8'; }
+      if (status === 'I') { statusBg = '#fefce8'; statusColor = '#b45309'; }
+      if (status === 'A') { statusBg = '#fef2f2'; statusColor = '#b91c1c'; }
+
+      const uniformBadge = isUniform 
+        ? `<span style="color: #166534; font-size: 6pt; font-weight: bold;">[Seragam]</span>`
+        : `<span style="color: #dc2626; font-size: 6pt; font-weight: bold;">[No Srgm]</span>`;
+
+      const physNote = rec.physicalNote ? `<div style="font-size: 5.5pt; color: #64748b;">${rec.physicalNote}</div>` : '';
+
+      return `
+        <td style="background-color: ${statusBg}; text-align: center; border: 1px solid #94a3b8; padding: 4px 2px;">
+          <div style="font-weight: bold; color: ${statusColor}; font-size: 8pt;">${status}</div>
+          ${status === 'H' ? uniformBadge : ''}
+          ${physNote}
+        </td>
+      `;
+    }).join('');
+
+    const baseDivider = meetingCount > 0 ? meetingCount : 1;
+    const percent = Math.round((studentH / baseDivider) * 100);
+    const customNote = meta.studentNotes?.[student.id] || (studentH === meetingCount ? 'Partisipasi fisik sangat baik' : studentS > 0 ? 'Perlu pemantauan kebugaran' : 'Cukup aktif');
+
+    let percentStyle = 'color: #166534; font-weight: bold; background-color: #f0fdf4;';
+    if (percent < 75) {
+      percentStyle = 'color: #b91c1c; font-weight: bold; background-color: #fef2f2;';
+    }
+
+    return `
+      <tr style="${sIdx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 3px 2px;">${sIdx + 1}</td>
+        <td style="text-align: left; border: 1px solid #cbd5e1; padding: 3px 5px; font-weight: 600;">${student.name}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 3px 2px; color: ${student.gender === 'L' ? '#1d4ed8' : '#db2777'}; font-weight: bold;">${student.gender}</td>
+        ${weekCells}
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #166534; background-color: #f0fdf4;">${studentH}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #1d4ed8; background-color: #eff6ff;">${studentS}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #b45309; background-color: #fefce8;">${studentI}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #b91c1c; background-color: #fef2f2;">${studentA}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; ${percentStyle}">${percent}%</td>
+        <td style="text-align: left; border: 1px solid #cbd5e1; padding: 3px 5px; font-size: 6.5pt; color: #475569;">${customNote}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const classAvgPercent = activeClass.students.length > 0 && meetingCount > 0
+    ? Math.round((grandTotalH / (activeClass.students.length * meetingCount)) * 100)
+    : 100;
+
+  const content = `
+    <!-- HEADER RESMI INSTANSI -->
+    <div style="text-align: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 6pt; margin-bottom: 10pt;">
+      <p style="margin: 0; font-size: 9pt; font-weight: bold; text-transform: uppercase; color: #475569; letter-spacing: 0.8px;">
+        PEMERINTAH KOTA / KABUPATEN DINAS PENDIDIKAN DAN KEBUDAYAAN
+      </p>
+      <h2 style="margin: 2pt 0 1pt 0; font-size: 13pt; color: #0f172a; text-transform: uppercase; border-left: none; padding-left: 0; font-family: 'Arial Black', Arial, sans-serif;">
+        ${namaSekolah}
+      </h2>
+      <h1 style="margin: 3pt 0 3pt 0; font-size: 14pt; color: #0f172a; border-bottom: none; padding-bottom: 0; font-family: 'Arial Black', Arial, sans-serif;">
+        PRESENSI & OBSERVASI PEMBELAJARAN MINGGUAN PJOK (1 BULAN)
+      </h1>
+      <p style="margin: 0; font-size: 9pt; font-weight: bold; color: #334155;">
+        BULAN: ${namaBulan.toUpperCase()} ${meta.tahun} &bull; TAHUN AJARAN ${tahunAjaran} &bull; MATA PELAJARAN: PENDIDIKAN JASMANI, OLAHRAGA, DAN KESEHATAN
+      </p>
+    </div>
+
+    <!-- IDENTITAS KELAS & JADWAL -->
+    <table style="width: 100%; font-size: 8pt; margin-bottom: 8pt; border-collapse: collapse; border: none;">
+      <tr>
+        <td style="border: none; padding: 2px 0; width: 35%;"><strong>Rombongan Belajar:</strong> ${activeClass.name} (Kelas ${activeClass.grade} SD)</td>
+        <td style="border: none; padding: 2px 0; width: 35%;"><strong>Jadwal Pertemuan:</strong> Setiap Hari ${meta.dayOfWeekName || 'Selasa'}</td>
+        <td style="border: none; padding: 2px 0; width: 30%; text-align: right;"><strong>Periode:</strong> ${namaBulan} ${meta.tahun}</td>
+      </tr>
+      <tr>
+        <td style="border: none; padding: 2px 0;"><strong>Fase Kurikulum:</strong> Fase ${activeClass.grade <= 2 ? 'A' : activeClass.grade <= 4 ? 'B' : 'C'}</td>
+        <td style="border: none; padding: 2px 0;"><strong>Jumlah Peserta Didik:</strong> ${activeClass.students.length} Siswa (${boysCount} L / ${girlsCount} P)</td>
+        <td style="border: none; padding: 2px 0; text-align: right;"><strong>Total Pertemuan:</strong> ${meetingCount} Pekan Tatap Muka</td>
+      </tr>
+      <tr>
+        <td style="border: none; padding: 2px 0;"><strong>Guru PJOK Pengampu:</strong> ${namaGuru}</td>
+        <td style="border: none; padding: 2px 0;"><strong>Kepala Sekolah:</strong> ${namaKepalaSekolah}</td>
+        <td style="border: none; padding: 2px 0; text-align: right;"><strong>Rata-rata Kehadiran:</strong> <span style="font-weight: bold; color: #166534;">${classAvgPercent}%</span></td>
+      </tr>
+    </table>
+
+    <!-- TABEL RINCIAN PERTEMUAN MINGGUAN -->
+    <div style="margin-bottom: 8pt;">
+      <p style="margin: 0 0 3pt 0; font-size: 8pt; font-weight: bold; color: #1e293b;">Rincian Materi Pertemuan Mingguan PJOK:</p>
+      <table style="width: 100%; border-collapse: collapse; font-size: 7.5pt;">
+        <thead>
+          <tr style="background-color: #047857; color: #ffffff;">
+            <th style="width: 15%; text-align: center; border: 1px solid #047857; padding: 3px;">Pekan / Minggu</th>
+            <th style="width: 18%; text-align: center; border: 1px solid #047857; padding: 3px;">Tanggal Pertemuan</th>
+            <th style="width: 47%; text-align: left; border: 1px solid #047857; padding: 3px 6px;">Materi / Aktivitas Pembelajaran PJOK</th>
+            <th style="width: 20%; text-align: center; border: 1px solid #047857; padding: 3px;">Lokasi / Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${meetings.map(m => `
+            <tr>
+              <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 3px;">Minggu Ke-${m.weekNum}</td>
+              <td style="text-align: center; border: 1px solid #cbd5e1; padding: 3px;">${m.date || '-'}</td>
+              <td style="text-align: left; border: 1px solid #cbd5e1; padding: 3px 6px;">${m.topic || 'Aktivitas Kebugaran & Olahraga'}</td>
+              <td style="text-align: center; border: 1px solid #cbd5e1; padding: 3px; font-size: 7pt; color: #047857; font-weight: 600;">${m.venue || 'Lapangan Olahraga'} (${m.executionStatus || 'Terlaksana'})</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TABEL UTAMA MATRIKS PRESENSI MINGGUAN SISWA -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 7pt; margin-bottom: 10pt;">
+      <thead>
+        <tr style="background-color: #0f172a; color: #ffffff;">
+          <th rowspan="2" style="width: 24px; text-align: center; border: 1px solid #0f172a; padding: 4px 2px;">No.</th>
+          <th rowspan="2" style="width: 140px; text-align: left; border: 1px solid #0f172a; padding: 4px 5px;">Nama Peserta Didik</th>
+          <th rowspan="2" style="width: 24px; text-align: center; border: 1px solid #0f172a; padding: 4px 2px;">L/P</th>
+          <th colspan="${meetingCount}" style="text-align: center; border: 1px solid #0f172a; padding: 3px 2px; font-size: 7.5pt;">
+            PRESENSI PERTEMUAN MINGGUAN BULAN ${namaBulan.toUpperCase()} ${meta.tahun}
+          </th>
+          <th colspan="4" style="text-align: center; border: 1px solid #0f172a; padding: 3px 2px;">REKAP</th>
+          <th rowspan="2" style="width: 32px; text-align: center; border: 1px solid #0f172a; padding: 4px 2px;">%</th>
+          <th rowspan="2" style="width: 120px; text-align: left; border: 1px solid #0f172a; padding: 4px 5px;">Catatan Observasi Fisik Guru</th>
+        </tr>
+        <tr style="background-color: #1e293b; color: #ffffff;">
+          ${meetings.map(m => `
+            <th style="width: 55px; text-align: center; font-size: 6.5pt; border: 1px solid #94a3b8; padding: 3px 1px;">
+              Minggu ${m.weekNum}<br>
+              <span style="font-weight: normal; font-size: 6pt; opacity: 0.85;">${m.date ? m.date.slice(5) : ''}</span>
+            </th>
+          `).join('')}
+          <th style="width: 18px; text-align: center; font-size: 6.5pt; background-color: #166534; color: #ffffff; border: 1px solid #94a3b8;">H</th>
+          <th style="width: 18px; text-align: center; font-size: 6.5pt; background-color: #1d4ed8; color: #ffffff; border: 1px solid #94a3b8;">S</th>
+          <th style="width: 18px; text-align: center; font-size: 6.5pt; background-color: #b45309; color: #ffffff; border: 1px solid #94a3b8;">I</th>
+          <th style="width: 18px; text-align: center; font-size: 6.5pt; background-color: #b91c1c; color: #ffffff; border: 1px solid #94a3b8;">A</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${studentRows}
+      </tbody>
+      <tfoot>
+        <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #0f172a;">
+          <td colspan="3" style="text-align: right; padding: 4px; border: 1px solid #94a3b8;">TOTAL KELAS:</td>
+          ${meetings.map(m => {
+            const mH = (activeClass.students || []).filter(s => {
+              const r = meta.weeklyRecords?.[s.id]?.[m.weekNum];
+              return !r || r.status === 'H';
+            }).length;
+            return `<td style="text-align: center; border: 1px solid #94a3b8; font-size: 6.5pt; color: #166534;">${mH} Hadir</td>`;
+          }).join('')}
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #dcfce7; color: #166534;">${grandTotalH}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #dbeafe; color: #1d4ed8;">${grandTotalS}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #fef9c3; color: #b45309;">${grandTotalI}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #fee2e2; color: #b91c1c;">${grandTotalA}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; color: #166534;">${classAvgPercent}%</td>
+          <td style="border: 1px solid #94a3b8;"></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- KETERANGAN KODE & CEKLIS FISIK -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-bottom: 12pt; border: none;">
+      <tr>
+        <td style="border: none; width: 60%; vertical-align: top;">
+          <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 6pt; border-radius: 4px;">
+            <strong>Keterangan Format Presensi Mingguan PJOK:</strong><br>
+            <span style="display: inline-block; width: 90px;"><strong>H</strong> = Hadir</span>
+            <span style="display: inline-block; width: 90px;"><strong>S</strong> = Sakit</span>
+            <span style="display: inline-block; width: 90px;"><strong>I</strong> = Izin</span>
+            <span style="display: inline-block; width: 140px;"><strong>A</strong> = Alpa (Tanpa Keterangan)</span><br>
+            <span style="display: inline-block; width: 180px;"><strong>[Seragam]</strong> = Pakaian Olahraga Lengkap</span>
+            <span style="display: inline-block; width: 180px;"><strong>[No Srgm]</strong> = Tidak Berseragam Lengkap</span>
+          </div>
+        </td>
+        <td style="border: none; width: 40%; vertical-align: top; padding-left: 10pt;">
+          <div style="background-color: #f0fdf4; border: 1px solid #86efac; padding: 6pt; border-radius: 4px;">
+            <strong>Ringkasan Kebugaran & Kepatuhan Kelas:</strong><br>
+            Total Hadir: <strong>${grandTotalH}</strong> &bull; Sakit: <strong>${grandTotalS}</strong> &bull; Izin: <strong>${grandTotalI}</strong> &bull; Alpa: <strong>${grandTotalA}</strong><br>
+            Rasio Kehadiran Lapangan: <strong style="color: #166534; font-size: 9pt;">${classAvgPercent}%</strong><br>
+            Kepatuhan Seragam Olahraga: <strong style="color: #047857;">${totalOpportunities > 0 ? Math.round((grandTotalUniform / totalOpportunities) * 100) : 100}%</strong>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- LEMBAR PENGESAHAN TANDA TANGAN -->
+    <table style="width: 100%; border: none; font-size: 8pt; margin-top: 14pt; border-collapse: collapse;">
+      <tr>
+        <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+          <p style="margin: 0;">Mengetahui,</p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Kepala Sekolah ${namaSekolah}</p>
+          <br><br><br><br>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">${namaKepalaSekolah}</p>
+          <p style="margin: 2pt 0 0 0; color: #475569; font-size: 7.5pt;">NIP. ${nipKepalaSekolah}</p>
+        </td>
+        <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+          <p style="margin: 0;">${kota}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Guru Mata Pelajaran PJOK</p>
+          <br><br><br><br>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">${namaGuru}</p>
+          <p style="margin: 2pt 0 0 0; color: #475569; font-size: 7.5pt;">NIP. ${nipGuru}</p>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  return wrapWithLandscapeDocShell(`Presensi_Mingguan_PJOK_${activeClass.name.replace(/\s+/g, '_')}_${namaBulan}_${meta.tahun}`, content);
+}
+
+export interface MonthSummaryPerStudent {
+  hadir: number;
+  sakit: number;
+  izin: number;
+  alpa: number;
+  totalMeetings: number;
+  uniformCount: number;
+}
+
+export interface SemesterWeekInfo {
+  weekNum: number;
+  dateStr?: string;
+  dateLabel?: string;
+}
+
+export interface StudentSemesterPjokRow {
+  studentId: string;
+  studentName: string;
+  nisn?: string;
+  gender: 'L' | 'P';
+  weeklyStatus?: { [monthNum: number]: { [weekNum: number]: 'H' | 'S' | 'I' | 'A' } };
+  monthlyData: { [monthNum: number]: MonthSummaryPerStudent }; // month 7..12 or 1..6
+  semesterTotalH: number;
+  semesterTotalS: number;
+  semesterTotalI: number;
+  semesterTotalA: number;
+  semesterTotalMeetings: number;
+  semesterTotalJp: number; // e.g. semesterTotalH * 3
+  semesterAttendancePercent: number; // e.g. 95%
+  semesterUniformPercent: number; // e.g. 92%
+  predicate: 'Sangat Baik' | 'Baik' | 'Cukup' | 'Perlu Bimbingan';
+  catatanRaporPjok: string;
+}
+
+export interface RekapSemesterPjokMeta {
+  semester: 1 | 2; // 1 = Ganjil, 2 = Genap
+  tahunAjaran: string; // e.g. "2026/2027"
+  namaSekolah?: string;
+  namaGuru?: string;
+  nipGuru?: string;
+  namaKepalaSekolah?: string;
+  nipKepalaSekolah?: string;
+  kota?: string;
+  jpPerPertemuan?: number; // default 3 JP
+  months: { monthNum: number; monthName: string; meetingCount: number; weeks?: SemesterWeekInfo[] }[];
+  studentRows: StudentSemesterPjokRow[];
+  classStats: {
+    avgAttendancePercent: number;
+    avgUniformPercent: number;
+    totalSemesterJp: number;
+    perfectStudentsCount: number;
+    attentionStudentsCount: number;
+  };
+}
+
+/**
+ * 3d. Exports 1 Semester PJOK Attendance Recapitulation to Microsoft Word format (Landscape)
+ */
+export function exportRekapSemesterPjokToDoc(activeClass: ClassData, meta: RekapSemesterPjokMeta): string {
+  const namaSekolah = meta.namaSekolah || 'SD NEGERI HARAPAN BANGSA';
+  const namaGuru = meta.namaGuru || 'Ahmad Rafsanjani, S.Pd.';
+  const nipGuru = meta.nipGuru || '19880512 201503 1 002';
+  const namaKepalaSekolah = meta.namaKepalaSekolah || 'H. Muhammad Nur, M.Pd.';
+  const nipKepalaSekolah = meta.nipKepalaSekolah || '19750814 199903 1 004';
+  const kota = meta.kota || 'Jakarta';
+
+  const boysCount = (activeClass.students || []).filter(s => s.gender === 'L').length;
+  const girlsCount = (activeClass.students || []).filter(s => s.gender === 'P').length;
+
+  const months = meta.months || [];
+  const jpPerPertemuan = meta.jpPerPertemuan || 3;
+
+  let grandSemesterH = 0;
+  let grandSemesterS = 0;
+  let grandSemesterI = 0;
+  let grandSemesterA = 0;
+
+  // Build Table Rows
+  const studentRowsHtml = (meta.studentRows || []).map((row, sIdx) => {
+    grandSemesterH += row.semesterTotalH;
+    grandSemesterS += row.semesterTotalS;
+    grandSemesterI += row.semesterTotalI;
+    grandSemesterA += row.semesterTotalA;
+
+    const monthlyCells = months.map(m => {
+      const weeksList = m.weeks && m.weeks.length > 0 
+        ? m.weeks 
+        : Array.from({ length: m.meetingCount || 4 }, (_, i) => ({ weekNum: i + 1 }));
+
+      return weeksList.map(w => {
+        const status = row.weeklyStatus?.[m.monthNum]?.[w.weekNum] || 'H';
+        let bg = '#f0fdf4';
+        let col = '#166534';
+        if (status === 'S') { bg = '#eff6ff'; col = '#1d4ed8'; }
+        if (status === 'I') { bg = '#fefce8'; col = '#b45309'; }
+        if (status === 'A') { bg = '#fef2f2'; col = '#b91c1c'; }
+
+        return `<td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: ${col}; background-color: ${bg}; padding: 3px 1px; font-size: 6.5pt;">${status}</td>`;
+      }).join('');
+    }).join('');
+
+    let predicateColor = '#166534';
+    if (row.predicate === 'Baik') predicateColor = '#0369a1';
+    else if (row.predicate === 'Cukup') predicateColor = '#b45309';
+    else if (row.predicate === 'Perlu Bimbingan') predicateColor = '#b91c1c';
+
+    return `
+      <tr style="${sIdx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 3px 2px;">${sIdx + 1}</td>
+        <td style="text-align: left; border: 1px solid #cbd5e1; padding: 3px 5px; font-weight: 600;">${row.studentName}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 3px 2px; color: ${row.gender === 'L' ? '#1d4ed8' : '#db2777'}; font-weight: bold;">${row.gender}</td>
+        ${monthlyCells}
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #166534; background-color: #dcfce7; padding: 3px 2px;">${row.semesterTotalH}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #1d4ed8; background-color: #dbeafe; padding: 3px 2px;">${row.semesterTotalS}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #b45309; background-color: #fef9c3; padding: 3px 2px;">${row.semesterTotalI}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #b91c1c; background-color: #fee2e2; padding: 3px 2px;">${row.semesterTotalA}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #047857; padding: 3px 2px;">${row.semesterTotalJp} JP</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: #166534; background-color: #f0fdf4; padding: 3px 2px;">${row.semesterAttendancePercent}%</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: 600; color: #0369a1; padding: 3px 2px;">${row.semesterUniformPercent}%</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; font-weight: bold; color: ${predicateColor}; padding: 3px 2px; font-size: 6.5pt;">${row.predicate}</td>
+        <td style="text-align: left; border: 1px solid #cbd5e1; padding: 3px 4px; font-size: 6.5pt; color: #475569;">${row.catatanRaporPjok}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const content = `
+    <!-- HEADER RESMI INSTANSI -->
+    <div style="text-align: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 6pt; margin-bottom: 10pt;">
+      <p style="margin: 0; font-size: 9pt; font-weight: bold; text-transform: uppercase; color: #475569; letter-spacing: 0.8px;">
+        PEMERINTAH KOTA / KABUPATEN DINAS PENDIDIKAN DAN KEBUDAYAAN
+      </p>
+      <h2 style="margin: 2pt 0 1pt 0; font-size: 13pt; color: #0f172a; text-transform: uppercase; border-left: none; padding-left: 0; font-family: 'Arial Black', Arial, sans-serif;">
+        ${namaSekolah}
+      </h2>
+      <h1 style="margin: 3pt 0 3pt 0; font-size: 13.5pt; color: #0f172a; border-bottom: none; padding-bottom: 0; font-family: 'Arial Black', Arial, sans-serif;">
+        REKAPITULASI PRESENSI MINGGUAN GURU PJOK SEMESTER ${meta.semester === 1 ? '1 (GANJIL: JULI - DESEMBER)' : '2 (GENAP: JANUARI - JUNI)'}
+      </h1>
+      <p style="margin: 0; font-size: 9pt; font-weight: bold; color: #334155;">
+        TAHUN AJARAN ${meta.tahunAjaran} &bull; MATA PELAJARAN: PENDIDIKAN JASMANI, OLAHRAGA, DAN KESEHATAN (PJOK)
+      </p>
+    </div>
+
+    <!-- IDENTITAS KELAS & RINGKASAN SEMESTER -->
+    <table style="width: 100%; font-size: 8pt; margin-bottom: 8pt; border-collapse: collapse; border: none;">
+      <tr>
+        <td style="border: none; padding: 2px 0; width: 35%;"><strong>Rombongan Belajar:</strong> ${activeClass.name} (Kelas ${activeClass.grade} SD)</td>
+        <td style="border: none; padding: 2px 0; width: 35%;"><strong>Periode Semester:</strong> Semester ${meta.semester === 1 ? '1 (Juli - Desember)' : '2 (Januari - Juni)'}</td>
+        <td style="border: none; padding: 2px 0; width: 30%; text-align: right;"><strong>Tahun Ajaran:</strong> ${meta.tahunAjaran}</td>
+      </tr>
+      <tr>
+        <td style="border: none; padding: 2px 0;"><strong>Fase Kurikulum:</strong> Fase ${activeClass.grade <= 2 ? 'A' : activeClass.grade <= 4 ? 'B' : 'C'}</td>
+        <td style="border: none; padding: 2px 0;"><strong>Jumlah Peserta Didik:</strong> ${activeClass.students.length} Siswa (${boysCount} L / ${girlsCount} P)</td>
+        <td style="border: none; padding: 2px 0; text-align: right;"><strong>Rata-rata Kehadiran Semester:</strong> <span style="font-weight: bold; color: #166534;">${meta.classStats.avgAttendancePercent}%</span></td>
+      </tr>
+      <tr>
+        <td style="border: none; padding: 2px 0;"><strong>Guru PJOK Pengampu:</strong> ${namaGuru}</td>
+        <td style="border: none; padding: 2px 0;"><strong>Kepala Sekolah:</strong> ${namaKepalaSekolah}</td>
+        <td style="border: none; padding: 2px 0; text-align: right;"><strong>Rata-rata Kepatuhan Seragam:</strong> <span style="font-weight: bold; color: #0369a1;">${meta.classStats.avgUniformPercent}%</span></td>
+      </tr>
+    </table>
+
+    <!-- TABEL UTAMA REKAPITULASI SEMESTER (DENGAN MINGGU 1, 2, 3, 4, 5 PER BULAN) -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 6pt; margin-bottom: 10pt;">
+      <thead>
+        <tr style="background-color: #0f172a; color: #ffffff;">
+          <th rowspan="2" style="width: 18px; text-align: center; border: 1px solid #0f172a; padding: 4px 1px;">No.</th>
+          <th rowspan="2" style="width: 110px; text-align: left; border: 1px solid #0f172a; padding: 4px 3px;">Nama Peserta Didik</th>
+          <th rowspan="2" style="width: 16px; text-align: center; border: 1px solid #0f172a; padding: 4px 1px;">L/P</th>
+          ${months.map(m => {
+            const wLen = m.weeks && m.weeks.length > 0 ? m.weeks.length : (m.meetingCount || 4);
+            return `
+              <th colspan="${wLen}" style="text-align: center; border: 1px solid #0f172a; padding: 2px 1px; font-size: 6.5pt; letter-spacing: 0.5px;">
+                ${m.monthName.toUpperCase()}<br>
+                <span style="font-weight: normal; font-size: 5pt; opacity: 0.85;">(${wLen} Minggu)</span>
+              </th>
+            `;
+          }).join('')}
+          <th colspan="4" style="text-align: center; border: 1px solid #0f172a; padding: 2px 1px; background-color: #047857;">TOTAL SEMESTER</th>
+          <th rowspan="2" style="width: 28px; text-align: center; border: 1px solid #0f172a; padding: 4px 1px;">TOTAL JP</th>
+          <th rowspan="2" style="width: 22px; text-align: center; border: 1px solid #0f172a; padding: 4px 1px;">% HADIR</th>
+          <th rowspan="2" style="width: 22px; text-align: center; border: 1px solid #0f172a; padding: 4px 1px;">% SRGM</th>
+          <th rowspan="2" style="width: 40px; text-align: center; border: 1px solid #0f172a; padding: 4px 1px;">PREDIKAT</th>
+          <th rowspan="2" style="width: 100px; text-align: left; border: 1px solid #0f172a; padding: 4px 3px;">Catatan Rapor & Kebugaran PJOK</th>
+        </tr>
+        <tr style="background-color: #1e293b; color: #ffffff;">
+          ${months.map(m => {
+            const weeksList = m.weeks && m.weeks.length > 0 
+              ? m.weeks 
+              : Array.from({ length: m.meetingCount || 4 }, (_, i) => ({ weekNum: i + 1 }));
+            return weeksList.map(w => `
+              <th style="width: 18px; text-align: center; font-size: 5pt; border: 1px solid #94a3b8; padding: 2px 1px; font-weight: bold;">
+                Ming ${w.weekNum}
+              </th>
+            `).join('');
+          }).join('')}
+          <th style="width: 13px; text-align: center; font-size: 5.5pt; background-color: #166534; color: #ffffff; border: 1px solid #94a3b8;">H</th>
+          <th style="width: 13px; text-align: center; font-size: 5.5pt; background-color: #1d4ed8; color: #ffffff; border: 1px solid #94a3b8;">S</th>
+          <th style="width: 13px; text-align: center; font-size: 5.5pt; background-color: #b45309; color: #ffffff; border: 1px solid #94a3b8;">I</th>
+          <th style="width: 13px; text-align: center; font-size: 5.5pt; background-color: #b91c1c; color: #ffffff; border: 1px solid #94a3b8;">A</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${studentRowsHtml}
+      </tbody>
+      <tfoot>
+        <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #0f172a;">
+          <td colspan="3" style="text-align: right; padding: 3px; border: 1px solid #94a3b8; font-size: 6pt;">TOTAL KELAS:</td>
+          ${months.map(m => {
+            const weeksList = m.weeks && m.weeks.length > 0 
+              ? m.weeks 
+              : Array.from({ length: m.meetingCount || 4 }, (_, i) => ({ weekNum: i + 1 }));
+            return weeksList.map(w => {
+              const presentCount = meta.studentRows.filter(r => {
+                const st = r.weeklyStatus?.[m.monthNum]?.[w.weekNum];
+                return !st || st === 'H';
+              }).length;
+              return `<td style="text-align: center; border: 1px solid #94a3b8; font-weight: bold; color: #166534; font-size: 5.5pt;">${presentCount}</td>`;
+            }).join('');
+          }).join('')}
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #dcfce7; color: #166534; font-weight: bold;">${grandSemesterH}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #dbeafe; color: #1d4ed8; font-weight: bold;">${grandSemesterS}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #fef9c3; color: #b45309; font-weight: bold;">${grandSemesterI}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; background-color: #fee2e2; color: #b91c1c; font-weight: bold;">${grandSemesterA}</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; color: #047857; font-weight: bold;">${meta.classStats.totalSemesterJp} JP</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; color: #166534; font-weight: bold;">${meta.classStats.avgAttendancePercent}%</td>
+          <td style="text-align: center; border: 1px solid #94a3b8; color: #0369a1; font-weight: bold;">${meta.classStats.avgUniformPercent}%</td>
+          <td colspan="2" style="border: 1px solid #94a3b8;"></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- RINGKASAN EVALUASI SEMESTER & LEMBAR PENGESAHAN -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-bottom: 12pt; border: none;">
+      <tr>
+        <td style="border: none; width: 60%; vertical-align: top;">
+          <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 6pt; border-radius: 4px;">
+            <strong>Keterangan Format Presensi Mingguan:</strong><br>
+            <span style="display: inline-block; width: 140px;"><strong>M1, M2, M3, M4, M5:</strong> Minggu ke-1 s.d. ke-5</span><br>
+            <span style="display: inline-block; width: 85px;"><strong>H</strong> = Hadir</span>
+            <span style="display: inline-block; width: 85px;"><strong>S</strong> = Sakit</span>
+            <span style="display: inline-block; width: 85px;"><strong>I</strong> = Izin</span>
+            <span style="display: inline-block; width: 85px;"><strong>A</strong> = Alpa</span>
+          </div>
+        </td>
+        <td style="border: none; width: 40%; vertical-align: top; padding-left: 10pt;">
+          <div style="background-color: #f0fdf4; border: 1px solid #86efac; padding: 6pt; border-radius: 4px;">
+            <strong>Ringkasan Semester Rombel:</strong><br>
+            Rasio Kehadiran: <strong style="color: #166534;">${meta.classStats.avgAttendancePercent}%</strong> &bull; Kepatuhan Seragam: <strong style="color: #0369a1;">${meta.classStats.avgUniformPercent}%</strong><br>
+            Hadir Sempurna (100%): <strong>${meta.classStats.perfectStudentsCount}</strong> Siswa<br>
+            Perhatian Kebugaran Khusus: <strong>${meta.classStats.attentionStudentsCount}</strong> Siswa
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- LEMBAR PENGESAHAN TANDA TANGAN -->
+    <table style="width: 100%; border: none; font-size: 8pt; margin-top: 14pt; border-collapse: collapse;">
+      <tr>
+        <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+          <p style="margin: 0;">Mengetahui,</p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Kepala Sekolah ${namaSekolah}</p>
+          <br><br><br><br>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">${namaKepalaSekolah}</p>
+          <p style="margin: 2pt 0 0 0; color: #475569; font-size: 7.5pt;">NIP. ${nipKepalaSekolah}</p>
+        </td>
+        <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+          <p style="margin: 0;">${kota}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Guru Mata Pelajaran PJOK</p>
+          <br><br><br><br>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">${namaGuru}</p>
+          <p style="margin: 2pt 0 0 0; color: #475569; font-size: 7.5pt;">NIP. ${nipGuru}</p>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  return wrapWithLandscapeDocShell(`Rekap_Semester_PJOK_${activeClass.name.replace(/\s+/g, '_')}_Sem_${meta.semester}_${meta.tahunAjaran.replace(/\//g, '-')}`, content);
+}
+
 /**
  * 4. Exports Student Scores Portfolio to Google Docs compatible Word Document
  */
@@ -2904,6 +3496,22 @@ export function exportCpToTpToDoc(data: CpToTpResult): string {
   `;
 
   return wrapWithDocShell(`FORMULASI_CP_KE_TP_${data.elemen.replace(/\s+/g, '_')}`, content);
+}
+
+/**
+ * Triggers a browser download of a formatted JSON file.
+ */
+export function downloadJsonFile(filename: string, data: any): void {
+  const jsonContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.endsWith('.json') ? filename : `${filename}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 

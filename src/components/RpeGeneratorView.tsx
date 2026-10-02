@@ -14,8 +14,11 @@ import {
   FileText
 } from 'lucide-react';
 import { RpeData } from '../types';
-import { downloadDocFile, copyAndOpenGoogleDocs, exportRpeToDoc } from '../lib/exportUtils';
+import { downloadDocFile, copyAndOpenGoogleDocs, exportRpeToDoc, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getRpePrompts } from '../utils/aiPromptGenerators';
 
 export default function RpeGeneratorView() {
   // Input states
@@ -38,6 +41,7 @@ export default function RpeGeneratorView() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const handleGenerateRpe = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,6 +373,24 @@ export default function RpeGeneratorView() {
                   )}
                 </button>
 
+                <ExportJsonPromptAiButtons
+                  variant="compact"
+                  onExportJson={() => {
+                    downloadJsonFile(`RPE_${namaSekolah.replace(/\s+/g, '_')}_Kelas_${kelas}_Sm${semester}`, {
+                      namaSekolah,
+                      kelas,
+                      jpPerMinggu,
+                      mataPelajaran,
+                      semester,
+                      tahunPelajaran,
+                      catatanTambahan,
+                      hasilRpe: rpeResult,
+                      tanggalEkspor: new Date().toISOString()
+                    });
+                  }}
+                  onOpenPromptAi={() => setShowPromptModal(true)}
+                />
+
                 <button
                   onClick={handleDownloadPdf}
                   disabled={isExportingPdf}
@@ -580,6 +602,31 @@ export default function RpeGeneratorView() {
         )}
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Rincian Pekan Efektif (RPE) PJOK"
+        subtitle={`Semester ${semester} TA ${tahunPelajaran} • ${namaSekolah}`}
+        tabs={getRpePrompts({
+          semester,
+          tahunAjaran: tahunPelajaran,
+          totalPekan: rpeResult?.perhitunganWaktu?.jumlahPekanSemester ?? 20,
+          pekanEfektif: rpeResult?.perhitunganWaktu?.pekanEfektif ?? 16
+        })}
+        jsonData={{
+          namaSekolah,
+          kelas,
+          jpPerMinggu,
+          mataPelajaran,
+          semester,
+          tahunPelajaran,
+          catatanTambahan,
+          hasilRpe: rpeResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`RPE_${namaSekolah.replace(/\s+/g, '_')}_Kelas_${kelas}`}
+      />
     </div>
   );
 }

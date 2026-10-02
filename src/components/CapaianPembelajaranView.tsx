@@ -17,8 +17,11 @@ import {
   ArrowRight,
   Sparkle
 } from 'lucide-react';
-import { exportAtpToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportAtpToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import { fetchWithRetry } from '../lib/fetchUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getCpPrompts } from '../utils/aiPromptGenerators';
 
 export default function CapaianPembelajaranView() {
   const [selectedFaseId, setSelectedFaseId] = useState<string>('fase-a');
@@ -32,6 +35,7 @@ export default function CapaianPembelajaranView() {
   const [generatedAtp, setGeneratedAtp] = useState<AtpResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const activeFase = PREBUILT_CP_DATA.find(f => f.id === selectedFaseId) || PREBUILT_CP_DATA[0];
   const activeElement = activeFase.elements.find(e => e.id === activeElementId) || activeFase.elements[0];
@@ -125,6 +129,21 @@ export default function CapaianPembelajaranView() {
             Standar Kompetensi & Alur Tujuan Pembelajaran (ATP) PJOK Kurikulum Merdeka Sekolah Dasar
           </p>
         </div>
+
+        <ExportJsonPromptAiButtons
+          onExportJson={() => {
+            downloadJsonFile(`CP_PJOK_${activeFase.id}_${activeElement.name.replace(/\s+/g, '_')}`, {
+              judul: 'Capaian Pembelajaran & Alur Tujuan Pembelajaran (ATP) PJOK',
+              tanggalEkspor: new Date().toISOString(),
+              fase: activeFase,
+              elemenAktif: activeElement,
+              materiSpesifik,
+              saranaSpesifik,
+              hasilAtp: generatedAtp
+            });
+          }}
+          onOpenPromptAi={() => setShowPromptModal(true)}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -449,6 +468,21 @@ export default function CapaianPembelajaranView() {
 
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Capaian Pembelajaran & ATP PJOK"
+        subtitle={`Fase ${activeFase.phaseName} (${activeFase.grades}) • Elemen ${activeElement.name}`}
+        tabs={getCpPrompts(activeFase.phaseName, activeElement.name, activeElement.description)}
+        jsonData={{
+          fase: activeFase,
+          elemen: activeElement,
+          atpHasil: generatedAtp,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`CP_PJOK_${activeFase.id}_${activeElement.name.replace(/\s+/g, '_')}`}
+      />
     </div>
   );
 }

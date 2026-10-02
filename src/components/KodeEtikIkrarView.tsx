@@ -18,10 +18,14 @@ import {
   Share2,
   FileText
 } from 'lucide-react';
-import { downloadDocFile } from '../lib/exportUtils';
+import { downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKodeEtikKkoCetakPrompts } from '../utils/aiPromptGenerators';
 
 export default function KodeEtikIkrarView() {
   const [activeTab, setActiveTab] = useState<'etik' | 'ikrar' | 'komitmen'>('etik');
+  const [showPromptModal, setShowPromptModal] = useState(false);
   
   // States for Commitment Certificate
   const [teacherName, setTeacherName] = useState('San Rafsanjani, S.Pd.');
@@ -219,7 +223,22 @@ export default function KodeEtikIkrarView() {
             </p>
           </div>
           
-          <div className="flex flex-wrap gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <ExportJsonPromptAiButtons
+              onExportJson={() => {
+                const filename = `Kode_Etik_dan_Ikrar_Guru_${teacherName.replace(/\s+/g, '_')}.json`;
+                downloadJsonFile(filename, {
+                  guru: teacherName,
+                  nip: teacherNip,
+                  sekolah: schoolName,
+                  daerah: district,
+                  tanggal: commitDate,
+                  kodeEtik: kodeEtikList,
+                  ikrarGuru: ikrarList
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
             <button
               onClick={handleCopyText}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/15 text-white font-bold text-xs rounded-xl transition-all border border-white/10 cursor-pointer"
@@ -550,6 +569,25 @@ export default function KodeEtikIkrarView() {
         </div>
       )}
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Kode Etik & Ikrar Guru PJOK"
+        subtitle="Panduan Moral & Keteladanan Pendidik Jasmani Kurikulum Merdeka"
+        tabs={getKodeEtikKkoCetakPrompts("Kode Etik dan Integritas Guru PJOK")}
+        defaultActiveTab="prompt_menu"
+        jsonData={{
+          guru: teacherName,
+          nip: teacherNip,
+          sekolah: schoolName,
+          daerah: district,
+          tanggal: commitDate,
+          kodeEtik: kodeEtikList,
+          ikrarGuru: ikrarList
+        }}
+        jsonFilename={`Kode_Etik_dan_Ikrar_Guru_${teacherName.replace(/\s+/g, '_')}.json`}
+      />
     </div>
   );
 }

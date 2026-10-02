@@ -31,9 +31,13 @@ import {
   Trash2,
   Shuffle,
   RotateCw,
-  ExternalLink
+  ExternalLink,
+  FileJson,
+  Bot,
+  X,
+  Code2
 } from 'lucide-react';
-import { downloadDocFile, copyAndOpenGoogleDocs } from '../lib/exportUtils';
+import { downloadDocFile, downloadJsonFile, copyAndOpenGoogleDocs } from '../lib/exportUtils';
 import { generateSummativeAssessment } from '../utils/summativeGenerator';
 import { downloadElementAsPdf, downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 
@@ -417,6 +421,9 @@ export default function SoalSumatifView() {
   const [shuffleNotice, setShuffleNotice] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isCopyingGoogleDoc, setIsCopyingGoogleDoc] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [promptMode, setPromptMode] = useState<'generator' | 'reviewer' | 'variasi'>('generator');
+  const [isPromptCopied, setIsPromptCopied] = useState(false);
   const [pdfNotice, setPdfNotice] = useState<string | null>(null);
   const printableContentRef = useRef<HTMLDivElement>(null);
 
@@ -1343,6 +1350,208 @@ Pedoman Penskoran: ${q.pedomanPenskoran}
       .catch(err => console.error('Failed to copy text: ', err));
   };
 
+  const handleExportJson = () => {
+    if (!result) return;
+    const cleanTitle = (result.judulUjian || 'Asesmen_Sumatif').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Asesmen_Sumatif_${cleanTitle}_Kelas_${grade}_${new Date().toISOString().slice(0, 10)}`;
+
+    const exportPayload = {
+      metadata: {
+        judulUjian: result.judulUjian,
+        mataPelajaran,
+        grade: `Kelas ${grade} SD`,
+        fase: grade === '1' || grade === '2' ? 'Fase A' : (grade === '3' || grade === '4' ? 'Fase B' : 'Fase C'),
+        semester,
+        tahunPelajaran,
+        namaSekolah,
+        dinasPendidikan,
+        jenisUjian,
+        levelKognitif,
+        skalaPenskoran,
+        modelStimulus,
+        dimensiP3,
+        jumlahSoal: result.questions.length,
+        materiList,
+        tanggalEkspor: new Date().toISOString()
+      },
+      kisiKisiRingkasan: result.questions.map((q, idx) => ({
+        no: idx + 1,
+        bentukSoal: q.bentukSoal,
+        levelKognitif: q.levelKognitif,
+        topik: q.materi,
+        indikatorSoal: q.indikatorSoal,
+        bobotSkor: q.bobotSkor
+      })),
+      soalDanKartu: result.questions.map((q, idx) => ({
+        nomor: idx + 1,
+        bentukSoal: q.bentukSoal,
+        levelKognitif: q.levelKognitif,
+        capaianPembelajaran: q.capaianPembelajaran,
+        tujuanPembelajaran: q.tujuanPembelajaran,
+        materi: q.materi,
+        indikatorSoal: q.indikatorSoal,
+        stimulus: q.stimulus,
+        pertanyaan: q.question,
+        pilihanJawaban: q.options || [],
+        kunciJawaban: q.correctAnswer,
+        bobotSkor: q.bobotSkor,
+        pembahasanPedagogis: q.explanation,
+        pedomanPenskoran: q.pedomanPenskoran,
+        pernyataanKompleks: q.pernyataanKompleks || [],
+        pasanganMenjodohkan: q.menjodohkanPairs || []
+      }))
+    };
+
+    downloadJsonFile(filename, exportPayload);
+    setPdfNotice('Berkas JSON Asesmen Sumatif & Kartu Soal berhasil diekspor & diunduh!');
+    setTimeout(() => setPdfNotice(null), 4000);
+  };
+
+  const generateAiPrompt = (mode: 'generator' | 'reviewer' | 'variasi'): string => {
+    const cleanMateri = materiList.filter(m => m.trim().length > 0).join(', ') || 'Aktivitas Kebugaran Jasmani & Pola Hidup Sehat';
+    const cleanBentukNames = selectedBentukSoal.map(getBentukSoalName).join(', ');
+    const distributionText = selectedBentukSoal.map(key => {
+      const name = getBentukSoalName(key);
+      const count = bentukSoalCounts[key] || 1;
+      return `- ${name}: ${count} butir`;
+    }).join('\n');
+
+    if (mode === 'generator') {
+      return `Bertindaklah sebagai Konsultan Evaluasi Pembelajaran & Penelaah Asesmen Kurikulum Merdeka Kemendikbudristek berpengalaman tinggi.
+
+TUGAS ANDA:
+Susunlah paket instrumen Asesmen Sumatif dan Kartu Soal lengkap untuk jenjang Sekolah Dasar berdasarkan spesifikasi resmi berikut:
+
+[IDENTITAS ASESMEN]
+- Jenis Ujian: ${jenisUjian}
+- Mata Pelajaran: ${mataPelajaran}
+- Tingkat / Fase: Kelas ${grade} SD (Fase ${grade === '1' || grade === '2' ? 'A' : (grade === '3' || grade === '4' ? 'B' : 'C')})
+- Semester / Tahun: Semester ${semester} / Tahun Pelajaran ${tahunPelajaran}
+- Satuan Pendidikan: ${namaSekolah} (${dinasPendidikan})
+- Dimensi Profil Pelajar Pancasila: ${dimensiP3.toUpperCase().replace(/_/g, ' ')}
+
+[SPESIFIKASI BUTIR SOAL]
+- Ruang Lingkup Materi: ${cleanMateri}
+- Total Butir Soal: ${totalSoal} butir
+- Distribusi Bentuk Soal:
+${distributionText}
+- Level Kognitif: ${levelKognitif.toUpperCase()} (Proporsi berimbang Taksonomi Bloom C1-C6)
+- Model Stimulus: ${modelStimulus.replace(/_/g, ' ').toUpperCase()} (kontekstual, studi kasus keseharian anak SD)
+- Opsi Pilihan Ganda: ${jumlahOpsiPG} opsi (A, B, C${jumlahOpsiPG === '4' ? ', D' : (jumlahOpsiPG === '5' ? ', D, E' : '')})
+- Skala Penskoran: ${skalaPenskoran}
+
+[STANDAR FORMAT KELUARAN YANG DIBUTUHKAN]
+Mohon hasilkan dalam 4 bagian terstruktur:
+1. NASKAH SOAL SUMATIF: Kop sekolah formal, petunjuk pengerjaan, stimulus bacaan kontekstual, butir-butir soal yang rapi dan siap cetak.
+2. KUNCI JAWABAN & PEMBAHASAN: Kunci setiap butir, penjelasan konsep pedagogis yang komprehensif, dan pedoman penskoran/rubrik penskoran terukur.
+3. KARTU SOAL RESMI PER NOMOR:
+   Untuk setiap butir soal, sajikan tabel Kartu Soal standar instrumen penilaian memuat:
+   - Capaian Pembelajaran (CP) & Tujuan Pembelajaran (TP)
+   - Indikator Soal spesifik
+   - Level Kognitif (C1-C6 / LOTS-MOTS-HOTS)
+   - Bentuk Soal & Nomor Butir
+   - Rumusan Butir Soal & Kunci Jawaban
+   - Pedoman Penskoran
+4. KISI-KISI ASESMEN SUMATIF: Matriks pemetaan nomor soal, lingkup materi, indikator, level kognitif, dan bentuk soal.
+
+Gunakan bahasa Indonesia baku yang komunikatif dan ramah anak Sekolah Dasar.`;
+    }
+
+    if (mode === 'reviewer') {
+      const questionsSnippet = result ? result.questions.slice(0, 10).map((q, idx) => `
+[Soal No. ${idx + 1}] (${q.bentukSoal} | Level: ${q.levelKognitif})
+Indikator: ${q.indikatorSoal}
+Pertanyaan: ${q.question}
+Kunci: ${q.correctAnswer}
+Rubrik: ${q.pedomanPenskoran}
+`).join('\n') : '(Silakan jalankan atau masukkan butir-butir soal yang ingin ditelaah)';
+
+      return `Bertindaklah sebagai Tim Ahli Reviewer & Validasi Butir Soal Asesmen Puspendik / BSKAP Kemendikbudristek.
+
+TUGAS ANDA:
+Lakukan telaah mutu instrumen (review kualitatif butir soal) terhadap paket asesmen sumatif berikut untuk memastikan evaluasi yang adil, valid, dan reliabel:
+
+[DATA INSTRUMEN]
+- Mata Pelajaran: ${mataPelajaran}
+- Sasaran Siswa: Kelas ${grade} SD
+- Materi Asesmen: ${cleanMateri}
+
+[DAFTAR BUTIR SOAL YANG DITELAAH]
+${questionsSnippet}
+
+[ASPEK TELAAH YANG WAJIB ANDA ANALISIS]:
+1. ASPEK MATERI:
+   - Apakah materi yang diujikan esensial dan sesuai dengan Capaian Pembelajaran Fase?
+   - Apakah kunci jawaban mutlak benar dan tidak menimbulkan multitafsir?
+2. ASPEK KONSTRUKSI:
+   - Apakah pokok soal dirumuskan secara jelas, tegas, dan tidak memberi petunjuk ke kunci jawaban?
+   - Untuk Pilihan Ganda: Apakah pilihan pengecoh (distraktor) homogen, logis, dan berfungsi efektif?
+   - Untuk Uraian/Isian: Apakah batasan jawaban dan pedoman penskoran jelas dan terukur?
+3. ASPEK BAHASA & KETERBACAAN:
+   - Apakah menggunakan bahasa Indonesia yang baik, benar, dan komunikatif bagi siswa Kelas ${grade} SD?
+   - Apakah tidak mengandung bias budaya, SARA, atau gender?
+4. REKOMENDASI PERBAIKAN:
+   - Berikan rumusan revisi butir soal yang lebih tajam dan sempurna untuk setiap butir yang memerlukan perbaikan.`;
+    }
+
+    // mode === 'variasi'
+    const currentQuestionsSummary = result ? result.questions.slice(0, 8).map((q, idx) => `
+- Butir ${idx + 1} (${q.bentukSoal} | Level: ${q.levelKognitif}): Indikator [${q.indikatorSoal}] -> Kunci [${q.correctAnswer}]
+`).join('\n') : '';
+
+    return `Bertindaklah sebagai Pengembang Soal Asesmen Sumatif SD Kurikulum Merdeka.
+
+TUGAS ANDA:
+Buatkan "PAKET B / PAKET PARALEL (REMEDIAL)" yang memiliki tingkat kesukaran dan kisi-kisi yang SETARA (Equivalent Test Form) dengan paket soal acuan berikut:
+
+[DATA UJIAN ACUAN]
+- Mata Pelajaran: ${mataPelajaran}
+- Kelas: Kelas ${grade} SD
+- Materi Pokok: ${cleanMateri}
+- Bentuk Soal: ${cleanBentukNames}
+- Level Kognitif: ${levelKognitif.toUpperCase()}
+
+[INDIKATOR ACUAN PAKET UTAMA]:
+${currentQuestionsSummary}
+
+[PETUNJUK WAJIB PENYUSUNAN PAKET PARALEL]:
+1. Gunakan indikator butir soal dan tujuan pembelajaran yang PERSIS SAMA dengan paket acuan di atas.
+2. Ubah konteks stimulus cerita, nama tokoh, angka, situasi ilustrasi gerak, atau sudut pandang pertanyaan sehingga butir soal BENAR-BENAR BARU dan tidak dapat dicontek dari paket utama.
+3. Pertahankan format bentuk soal, jumlah opsi PG, dan tingkat kesukaran yang setara.
+4. Sajikan Naskah Soal Paket B, Kunci Jawaban Lengkap, dan Pembahasan Pedagogis.`;
+  };
+
+  const handleCopyPrompt = (mode: 'generator' | 'reviewer' | 'variasi') => {
+    const promptText = generateAiPrompt(mode);
+    navigator.clipboard.writeText(promptText)
+      .then(() => {
+        setIsPromptCopied(true);
+        setTimeout(() => setIsPromptCopied(false), 3000);
+      })
+      .catch(err => console.error('Failed to copy prompt: ', err));
+  };
+
+  const handleDownloadPromptTxt = (mode: 'generator' | 'reviewer' | 'variasi') => {
+    const promptText = generateAiPrompt(mode);
+    const blob = new Blob([promptText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Prompt_AI_${mode.toUpperCase()}_Soal_Sumatif_Kelas_${grade}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenGemini = () => {
+    window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
+  };
+
+  const handleOpenChatGPT = () => {
+    window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" id="summative-assessment-generator">
       {/* Banner */}
@@ -1994,6 +2203,19 @@ Pedoman Penskoran: ${q.pedomanPenskoran}
                     <span>Acak &amp; Susun Variasi Baru</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPromptMode('generator');
+                    setShowPromptModal(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-50 to-indigo-50 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 text-purple-800 font-bold text-xs py-2.5 px-4 rounded-xl shadow-2xs transition-all cursor-pointer"
+                  title="Dapatkan prompt rekayasa lengkap untuk dijalankan di Google Gemini atau ChatGPT"
+                >
+                  <Bot className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Prompt AI (Gemini / ChatGPT)</span>
+                </button>
               </div>
             </form>
           </div>
@@ -2122,6 +2344,26 @@ Pedoman Penskoran: ${q.pedomanPenskoran}
                       <ExternalLink className="w-3.5 h-3.5" />
                     )}
                     <span>{isCopyingGoogleDoc ? 'Menyiapkan Docs...' : 'Cetak Google Doc'}</span>
+                  </button>
+
+                  {/* Ekspor JSON */}
+                  <button
+                    onClick={handleExportJson}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
+                    title="Ekspor seluruh struktur data soal, kunci, dan kartu soal dalam format file .JSON standar"
+                  >
+                    <FileJson className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Ekspor JSON</span>
+                  </button>
+
+                  {/* Prompt AI (Gemini / ChatGPT) */}
+                  <button
+                    onClick={() => setShowPromptModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
+                    title="Buka dan salin prompt rekayasa AI untuk Google Gemini atau ChatGPT"
+                  >
+                    <Bot className="w-3.5 h-3.5 text-purple-200" />
+                    <span>Prompt AI (Gemini / ChatGPT)</span>
                   </button>
 
                   <button
@@ -3031,6 +3273,188 @@ Pedoman Penskoran: ${q.pedomanPenskoran}
           )}
         </div>
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      {showPromptModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col my-auto max-h-[92vh]">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 text-white p-4 sm:p-5 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0 border border-white/20">
+                  <Bot className="w-6 h-6 text-purple-200" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
+                      Prompt Rekayasa AI (Gemini &amp; ChatGPT)
+                    </h3>
+                    <span className="bg-white/20 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      Kurikulum Merdeka
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-100 mt-1">
+                    Gunakan prompt terstruktur ini langsung di Google Gemini atau ChatGPT untuk menyusun instrumen, telaah kualitatif, atau variasi soal.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPromptModal(false)}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer shrink-0"
+                title="Tutup dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs for Prompt Mode */}
+            <div className="bg-slate-50 border-b border-slate-200 px-4 pt-3 flex flex-wrap gap-2 text-xs font-bold">
+              <button
+                onClick={() => setPromptMode('generator')}
+                className={`pb-2.5 px-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  promptMode === 'generator'
+                    ? 'border-purple-600 text-purple-700 bg-white rounded-t-lg shadow-2xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Pembuat Soal &amp; Kartu Soal Baru</span>
+              </button>
+              <button
+                onClick={() => setPromptMode('reviewer')}
+                className={`pb-2.5 px-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  promptMode === 'reviewer'
+                    ? 'border-purple-600 text-purple-700 bg-white rounded-t-lg shadow-2xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <BrainCircuit className="w-3.5 h-3.5" />
+                <span>Telaah &amp; Validasi Butir Soal</span>
+              </button>
+              <button
+                onClick={() => setPromptMode('variasi')}
+                className={`pb-2.5 px-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  promptMode === 'variasi'
+                    ? 'border-purple-600 text-purple-700 bg-white rounded-t-lg shadow-2xs'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Shuffle className="w-3.5 h-3.5" />
+                <span>Paket B / Soal Paralel (Remedial)</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+              {/* Quick Instructions & AI Launchers */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-purple-50/70 border border-purple-200/80 p-3 rounded-xl text-xs">
+                <div className="flex items-center gap-2 text-purple-900 font-medium">
+                  <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-800 font-bold flex items-center justify-center text-[11px] shrink-0">
+                    💡
+                  </span>
+                  <span>Salin prompt di bawah, lalu langsung buka model AI pilihan Anda:</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleOpenGemini}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-2xs transition-all cursor-pointer"
+                    title="Buka Google Gemini di tab baru"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Buka Google Gemini</span>
+                  </button>
+                  <button
+                    onClick={handleOpenChatGPT}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-2xs transition-all cursor-pointer"
+                    title="Buka ChatGPT di tab baru"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Buka ChatGPT</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Prompt Text Container */}
+              <div className="relative rounded-xl border border-slate-300 bg-slate-900 text-slate-100 overflow-hidden shadow-inner">
+                <div className="flex items-center justify-between px-3.5 py-2 bg-slate-950 border-b border-slate-800 text-[11px] text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <Code2 className="w-3.5 h-3.5 text-purple-400" />
+                    <span className="font-mono font-semibold text-slate-300">Prompt AI Format Markdown ({promptMode})</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span>{generateAiPrompt(promptMode).length} karakter</span>
+                    <button
+                      onClick={() => handleCopyPrompt(promptMode)}
+                      className="flex items-center gap-1 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                    >
+                      {isPromptCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-300" />
+                          <span>Tersalin!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Salin Prompt</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  readOnly
+                  value={generateAiPrompt(promptMode)}
+                  rows={12}
+                  className="w-full p-4 bg-transparent text-slate-200 font-mono text-xs leading-relaxed resize-none focus:outline-hidden"
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-normal">
+                * Prompt ini telah dioptimalkan dengan teknik <em>System Role &amp; Constraint Prompting</em> agar output AI konsisten dengan format rubrik Kurikulum Merdeka, Taksonomi Bloom, dan standar Kartu Soal nasional.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-50 border-t border-slate-200 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDownloadPromptTxt(promptMode)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Unduh Berkas .TXT</span>
+                </button>
+                {result && (
+                  <button
+                    onClick={handleExportJson}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer"
+                  >
+                    <FileJson className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Unduh Data JSON</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleCopyPrompt(promptMode)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  {isPromptCopied ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                  <span>{isPromptCopied ? 'Prompt Berhasil Disalin!' : 'Salin Seluruh Prompt'}</span>
+                </button>
+                <button
+                  onClick={() => setShowPromptModal(false)}
+                  className="px-3 py-2 text-slate-600 hover:text-slate-800 font-bold cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

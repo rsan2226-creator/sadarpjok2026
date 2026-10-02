@@ -22,7 +22,10 @@ import {
   FileSignature
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
-import { copyAndOpenGoogleDocs, downloadDocFile } from '../lib/exportUtils';
+import { copyAndOpenGoogleDocs, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getCoverPrompts } from '../utils/aiPromptGenerators';
 
 export interface CoverData {
   judulUtama: string;
@@ -79,6 +82,7 @@ export default function CoverGeneratorView() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -795,7 +799,31 @@ export default function CoverGeneratorView() {
               {/* Action Bar */}
               <div className="bg-white rounded-xl shadow-xs p-4 border border-slate-100 flex flex-wrap gap-2 justify-between items-center no-print">
                 <span className="text-xs font-bold text-slate-500">Hasil Desain Cover:</span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
+                  <ExportJsonPromptAiButtons
+                    variant="compact"
+                    onExportJson={() => {
+                      downloadJsonFile(`Cover_${judul.replace(/\s+/g, '_')}_${kelas.replace(/\s+/g, '_')}`, {
+                        documentType,
+                        judul,
+                        subJudul,
+                        mataPelajaran,
+                        kelas,
+                        semester,
+                        tahunAjaran,
+                        disusunOleh,
+                        nip,
+                        namaSekolah,
+                        dinasPendidikan,
+                        kotaKabupaten,
+                        coverStyle,
+                        hasilCover: coverResult,
+                        tanggalEkspor: new Date().toISOString()
+                      });
+                    }}
+                    onOpenPromptAi={() => setShowPromptModal(true)}
+                  />
+
                   <button
                     onClick={handleCopyAndGoToDocs}
                     className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
@@ -993,6 +1021,33 @@ export default function CoverGeneratorView() {
           )}
         </div>
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Cover Sampul Administrasi Guru PJOK"
+        subtitle={`${judul} • ${namaSekolah}`}
+        tabs={getCoverPrompts()}
+        jsonData={{
+          documentType,
+          judul,
+          subJudul,
+          mataPelajaran,
+          kelas,
+          semester,
+          tahunAjaran,
+          disusunOleh,
+          nip,
+          namaSekolah,
+          dinasPendidikan,
+          kotaKabupaten,
+          coverStyle,
+          hasilCover: coverResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`Cover_${judul.replace(/\s+/g, '_')}`}
+      />
     </div>
   );
 }

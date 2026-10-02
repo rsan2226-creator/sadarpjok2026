@@ -28,6 +28,9 @@ import {
   Award,
   HeartPulse
 } from 'lucide-react';
+import { downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
 
 interface ScheduleEntry {
   id: string;
@@ -60,6 +63,7 @@ export default function AnalisisJamMengajarView() {
   const [teacherName, setTeacherName] = useState('Budi Prasetyo, S.Pd.');
   const [schoolName, setSchoolName] = useState('SD Negeri 1 Merdeka');
   const [weeklyJpTarget, setWeeklyJpTarget] = useState(24);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // 2. Schedule Entries (Prefilled with realistic PJOK schedule for SD)
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([
@@ -213,21 +217,41 @@ export default function AnalisisJamMengajarView() {
     <div className="space-y-8 animate-fade-in" id="analisis-jam-container">
       
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 rounded-3xl p-6 md:p-8 text-white shadow-lg relative overflow-hidden">
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 rounded-3xl p-6 md:p-8 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 opacity-10 blur-3xl w-96 h-96 bg-white rounded-full"></div>
         <div className="absolute left-1/3 bottom-0 opacity-10 w-64 h-64 bg-teal-300 rounded-full blur-2xl"></div>
         
-        <div className="relative z-10 space-y-4">
+        <div className="relative z-10 space-y-4 max-w-2xl">
           <div className="inline-flex items-center gap-2 bg-white/15 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-xs">
             <Clock className="w-3.5 h-3.5 text-teal-200 animate-pulse" />
             Modul Analisis Jam Kerja
           </div>
           <h2 className="text-2xl md:text-3.5xl font-extrabold tracking-tight">
-            Analisis Jam Mengajar & Beban Kerja Guru PJOK
+            Analisis Jam Mengajar &amp; Beban Kerja Guru PJOK
           </h2>
           <p className="text-emerald-100 text-xs md:text-sm max-w-2xl font-medium leading-relaxed">
             Pantau pemenuhan syarat minimal 24 JP untuk Tunjangan Profesi Guru (TPG), kalkulasi ekuivalensi tugas tambahan Kemendikbudristek, serta ukur indeks kelelahan fisik di lapangan secara real-time.
           </p>
+        </div>
+
+        <div className="relative z-10 shrink-0">
+          <ExportJsonPromptAiButtons
+            onExportJson={() => {
+              downloadJsonFile(`Analisis_Jam_Mengajar_${teacherName.replace(/\s+/g, '_')}`, {
+                teacherName,
+                schoolName,
+                weeklyJpTarget,
+                grandTotalJp,
+                tatapMukaJp: totalScheduleJp,
+                extraDutyJp: totalExtraDutyJp,
+                schedule,
+                extraDuties,
+                aiAnalysisResult: aiResult,
+                tanggalEkspor: new Date().toISOString()
+              });
+            }}
+            onOpenPromptAi={() => setShowPromptModal(true)}
+          />
         </div>
       </div>
 
@@ -744,6 +768,59 @@ export default function AnalisisJamMengajarView() {
 
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Analisis Jam Mengajar & Beban Kerja PJOK"
+        subtitle={`Guru: ${teacherName} • ${schoolName} (${grandTotalJp} JP/pekan)`}
+        tabs={[
+          {
+            id: 'beban_kerja',
+            label: 'Analisis Beban Kerja & TPG 24 JP',
+            prompt: `Anda adalah Konsultan Kepegawaian Pendidik & Ahli Ergonomi Pendidikan Jasmani.
+Analisis beban mengajar guru PJOK berikut:
+- Nama Guru: ${teacherName}
+- Sekolah: ${schoolName}
+- Target Minimal: ${weeklyJpTarget} JP/minggu
+- Total Beban Mengajar: ${grandTotalJp} JP (Tatap Muka: ${totalScheduleJp} JP, Tugas Tambahan: ${totalExtraDutyJp} JP)
+
+Jadwal Mingguan:
+${schedule.map(s => `- ${s.day}: ${s.className} (${s.jp} JP) - ${s.notes || ''}`).join('\n')}
+
+Tugas Tambahan:
+${extraDuties.filter(e => e.checked).map(e => `- ${e.name} (${e.equivalentJp} JP Ekuivalensi)`).join('\n') || '- Tidak ada'}
+
+INSTRUKSI:
+1. Evaluasi apakah beban mengajar sudah memenuhi syarat minimal 24 JP TPG (Tunjangan Profesi Guru).
+2. Analisis indeks kelelahan fisik guru di lapangan (apakah ada hari dengan beban > 6 JP berturut-turut di lapangan).
+3. Berikan 3 rekomendasi taktis penjadwalan agar stamina guru tetap prima.`
+          },
+          {
+            id: 'laporan_kepsek',
+            label: 'Laporan Jam Mengajar ke Kepala Sekolah',
+            prompt: `Buatlah naskah Surat Laporan Pembagian Tugas Mengajar & Beban Kerja Guru PJOK resmi kepada Kepala Sekolah:
+- Nama: ${teacherName}
+- Unit Kerja: ${schoolName}
+- Akumulasi: ${grandTotalJp} JP / Pekan
+
+Format naskah kedinasan yang memuat:
+1. Dasar Hukum (Permendikbudristek No 15 Tahun 2018 tentang Pemenuhan Beban Kerja Guru).
+2. Rincian Tatap Muka di Lapangan & Tugas Tambahan.
+3. Permohonan pengesahan dan usulan sarana penunjang kesehatan guru.`
+          }
+        ]}
+        jsonData={{
+          teacherName,
+          schoolName,
+          weeklyJpTarget,
+          grandTotalJp,
+          schedule,
+          extraDuties,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`Analisis_Beban_Jam_${teacherName.replace(/\s+/g, '_')}`}
+      />
     </div>
   );
 }

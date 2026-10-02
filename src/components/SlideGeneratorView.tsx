@@ -29,8 +29,11 @@ import {
   FileText
 } from 'lucide-react';
 import { SlidePresentationData } from '../types';
-import { downloadDocFile, copyAndOpenGoogleDocs, exportSlidesToDoc } from '../lib/exportUtils';
+import { downloadDocFile, copyAndOpenGoogleDocs, exportSlidesToDoc, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getSlideMateriPrompts } from '../utils/aiPromptGenerators';
 
 export default function SlideGeneratorView() {
   // Input states
@@ -52,6 +55,7 @@ export default function SlideGeneratorView() {
   const [copyDeckSuccess, setCopyDeckSuccess] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [copiedSlideNo, setCopiedSlideNo] = useState<number | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Active slide index for previewing in mockup
   const [activePreviewIdx, setActivePreviewIdx] = useState<number>(0);
@@ -516,6 +520,25 @@ export default function SlideGeneratorView() {
                       <Play className="w-3.5 h-3.5 fill-current" />
                       Tayang Layar Penuh
                     </button>
+
+                    <ExportJsonPromptAiButtons
+                      variant="compact"
+                      onExportJson={() => {
+                        downloadJsonFile(`Slide_PPT_PJOK_Kelas_${kelas}_${topikMateri.replace(/\s+/g, '_')}`, {
+                          mataPelajaran,
+                          kelas,
+                          fase,
+                          topikMateri,
+                          jumlahSlide,
+                          gayaDesain,
+                          guruPenyusun,
+                          tanggalDokumen,
+                          hasilSlide: slidesResult,
+                          tanggalEkspor: new Date().toISOString()
+                        });
+                      }}
+                      onOpenPromptAi={() => setShowPromptModal(true)}
+                    />
 
                     <button
                       onClick={handleDownloadPdf}
@@ -1058,6 +1081,28 @@ export default function SlideGeneratorView() {
           </div>
         </div>
       )}
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Slide Presentasi PPT PJOK"
+        subtitle={`${topikMateri} • Kelas ${kelas} (Fase ${fase})`}
+        tabs={getSlideMateriPrompts(topikMateri)}
+        jsonData={{
+          mataPelajaran,
+          kelas,
+          fase,
+          topikMateri,
+          jumlahSlide,
+          gayaDesain,
+          guruPenyusun,
+          tanggalDokumen,
+          hasilSlide: slidesResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`Slide_PPT_PJOK_Kelas_${kelas}_${topikMateri.replace(/\s+/g, '_')}`}
+      />
     </div>
   );
 }

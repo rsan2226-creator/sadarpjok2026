@@ -16,6 +16,10 @@ import {
   Loader2
 } from 'lucide-react';
 import { downloadElementAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import { downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKodeEtikKkoCetakPrompts } from '../utils/aiPromptGenerators';
 
 interface CetakLaporanViewProps {
   classes: ClassData[];
@@ -50,6 +54,7 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
   const [showKop, setShowKop] = useState(true);
   const [showSignatures, setShowSignatures] = useState(true);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
 
   // Active object finders
@@ -113,6 +118,26 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <ExportJsonPromptAiButtons
+            onExportJson={() => {
+              const filename = `Cetak_Laporan_${docType}_PJOK.json`;
+              const payload = {
+                tipeDokumen: docType,
+                sekolah: schoolName,
+                alamat: schoolAddress,
+                guru: teacherName,
+                nipGuru: teacherNip,
+                kepsek: principalName,
+                nipKepsek: principalNip,
+                kota: printCity,
+                tanggal: printDate,
+                dataDokumen: docType === 'rapor' ? activeClass : docType === 'modul' ? activeModul : docType === 'jurnal' ? filteredJournals : activeRubrik
+              };
+              downloadJsonFile(filename, payload);
+            }}
+            onOpenPromptAi={() => setShowPromptModal(true)}
+          />
+
           <button
             onClick={handleDownloadPdf}
             disabled={isExportingPdf}
@@ -899,6 +924,28 @@ export default function CetakLaporanView({ classes, moduls, journals, rubriks }:
 
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Cetak Laporan & Administrasi Resmi"
+        subtitle={`Format Dokumen: ${docType === 'rapor' ? 'Laporan Rapor & Presensi' : docType === 'modul' ? 'Modul Ajar' : docType === 'jurnal' ? 'Jurnal Mengajar' : 'Rubrik Kinerja'}`}
+        tabs={getKodeEtikKkoCetakPrompts("Standar Format Dokumen dan Cetak Laporan Administrasi PJOK")}
+        defaultActiveTab="prompt_menu"
+        jsonData={{
+          tipeDokumen: docType,
+          sekolah: schoolName,
+          alamat: schoolAddress,
+          guru: teacherName,
+          nipGuru: teacherNip,
+          kepsek: principalName,
+          nipKepsek: principalNip,
+          kota: printCity,
+          tanggal: printDate,
+          dataDokumen: docType === 'rapor' ? activeClass : docType === 'modul' ? activeModul : docType === 'jurnal' ? filteredJournals : activeRubrik
+        }}
+        jsonFilename={`Cetak_Laporan_${docType}_PJOK.json`}
+      />
     </div>
   );
 }

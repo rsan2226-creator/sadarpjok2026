@@ -17,7 +17,10 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { exportJurnalToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportJurnalToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getJurnalPrompts } from '../utils/aiPromptGenerators';
 
 interface JurnalViewProps {
   journals: JurnalMengajar[];
@@ -32,6 +35,7 @@ export default function JurnalView({ journals, classes, onAddJournal, onDeleteJo
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Form state
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -112,12 +116,21 @@ export default function JurnalView({ journals, classes, onAddJournal, onDeleteJo
           <p className="text-xs text-slate-500">Log harian aktivitas mengajar fisik, kejadian luar biasa, cedera, dan pembinaan karakter sportif.</p>
         </div>
 
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> {isOpen ? 'Tutup Form Jurnal' : 'Tambah Jurnal Baru'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <ExportJsonPromptAiButtons
+            onExportJson={() => {
+              const filename = `Jurnal_Mengajar_PJOK_${new Date().toISOString().split('T')[0]}.json`;
+              downloadJsonFile(filename, journals);
+            }}
+            onOpenPromptAi={() => setShowPromptModal(true)}
+          />
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> {isOpen ? 'Tutup Form Jurnal' : 'Tambah Jurnal Baru'}
+          </button>
+        </div>
       </div>
 
       {/* Write Jurnal Panel */}
@@ -373,6 +386,18 @@ export default function JurnalView({ journals, classes, onAddJournal, onDeleteJo
           </div>
         )}
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Jurnal Refleksi Mengajar PJOK"
+        subtitle={`Total ${journals.length} Catatan Kejadian & Refleksi Pembelajaran`}
+        tabs={getJurnalPrompts(journals.length)}
+        defaultActiveTab="refleksi_jurnal"
+        jsonData={journals}
+        jsonFilename={`Jurnal_Mengajar_PJOK_${new Date().toISOString().split('T')[0]}.json`}
+      />
     </div>
   );
 }

@@ -29,8 +29,11 @@ import {
   EyeOff,
   Users
 } from 'lucide-react';
-import { downloadDocFile } from '../lib/exportUtils';
+import { downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getUlanganHarianPrompts } from '../utils/aiPromptGenerators';
 
 // Pre-written common PJOK Learning Objectives (TP) for quick selection
 const PRESETS_TP = [
@@ -130,6 +133,7 @@ export default function UlanganHarianView() {
   const [showAnswers, setShowAnswers] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Classroom grading state (seeded with 8 standard student names)
   const [students, setStudents] = useState<StudentGrade[]>([
@@ -535,17 +539,34 @@ export default function UlanganHarianView() {
         <div className="absolute right-0 top-0 opacity-10 translate-x-16 -translate-y-16 pointer-events-none">
           <BookMarked className="w-80 h-80" />
         </div>
-        <div className="relative z-10 space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 text-teal-200 text-xs font-bold uppercase tracking-wider">
-            <Award className="w-4 h-4 text-teal-400" />
-            Evaluasi Per TP Kurikulum Merdeka
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 text-teal-200 text-xs font-bold uppercase tracking-wider">
+              <Award className="w-4 h-4 text-teal-400" />
+              Evaluasi Per TP Kurikulum Merdeka
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
+              Ulangan Harian &amp; Praktik AI
+            </h2>
+            <p className="text-teal-100 text-xs sm:text-sm max-w-3xl leading-relaxed">
+              Buat instrumen penilaian harian berkualitas tinggi secara otomatis. Dukung <strong>Ujian Tulis</strong> (pilihan ganda dengan kunci jawaban + esai pemikiran tingkat tinggi) dan <strong>Ujian Praktik</strong> (instruksi tugas motorik terperinci + rubrik unjuk kerja dinamis).
+            </p>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
-            Ulangan Harian &amp; Praktik AI
-          </h2>
-          <p className="text-teal-100 text-xs sm:text-sm max-w-3xl leading-relaxed">
-            Buat instrumen penilaian harian berkualitas tinggi secara otomatis. Dukung <strong>Ujian Tulis</strong> (pilihan ganda dengan kunci jawaban + esai pemikiran tingkat tinggi) dan <strong>Ujian Praktik</strong> (instruksi tugas motorik terperinci + rubrik unjuk kerja dinamis).
-          </p>
+          <div className="shrink-0 bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/20">
+            <ExportJsonPromptAiButtons
+              onExportJson={() => {
+                const filename = `Ulangan_Harian_Kelas_${grade}_${(materi || 'PJOK').replace(/\s+/g, '_')}.json`;
+                downloadJsonFile(filename, testData || {
+                  grade,
+                  materi,
+                  tujuanPembelajaran,
+                  tipeUlangan,
+                  students
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
+          </div>
         </div>
       </div>
 
@@ -752,6 +773,14 @@ export default function UlanganHarianView() {
                 </div>
 
                 <div className="flex items-center gap-1.5">
+                  <ExportJsonPromptAiButtons
+                    variant="compact"
+                    onExportJson={() => {
+                      const filename = `Ulangan_Harian_${(testData.title || testData.materi).replace(/\s+/g, '_')}.json`;
+                      downloadJsonFile(filename, testData);
+                    }}
+                    onOpenPromptAi={() => setShowPromptModal(true)}
+                  />
                   {testData.tipeUlangan === 'tulis' && viewTab === 'instrumen' && (
                     <button
                       onClick={() => setShowAnswers(!showAnswers)}
@@ -1146,6 +1175,23 @@ export default function UlanganHarianView() {
 
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Ulangan Harian & Instrumen Asesmen PJOK"
+        subtitle={`Kelas ${grade} SD - ${materi}`}
+        tabs={getUlanganHarianPrompts(materi)}
+        defaultActiveTab="kisi_ulangan"
+        jsonData={testData || {
+          grade,
+          materi,
+          tujuanPembelajaran,
+          tipeUlangan,
+          students
+        }}
+        jsonFilename={`Ulangan_Harian_Kelas_${grade}_${(materi || 'PJOK').replace(/\s+/g, '_')}.json`}
+      />
     </div>
   );
 }

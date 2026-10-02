@@ -24,7 +24,10 @@ import {
   CheckSquare
 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
-import { copyAndOpenGoogleDocs, downloadDocFile } from '../lib/exportUtils';
+import { copyAndOpenGoogleDocs, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getSlideMateriPrompts } from '../utils/aiPromptGenerators';
 
 // Types for Materi Ajar
 export interface MateriPanel {
@@ -89,6 +92,7 @@ export default function MateriAjarView() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -671,7 +675,26 @@ export default function MateriAjarView() {
               {/* Action Bar */}
               <div className="bg-white rounded-xl shadow-xs p-4 border border-slate-100 flex flex-wrap gap-2 justify-between items-center no-print">
                 <span className="text-xs font-bold text-slate-500">Rancangan Siap Diekspor:</span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center flex-wrap">
+                  <ExportJsonPromptAiButtons
+                    variant="compact"
+                    onExportJson={() => {
+                      downloadJsonFile(`Materi_Ajar_${topikMateri.replace(/\s+/g, '_')}_Kelas_${kelas}`, {
+                        mataPelajaran,
+                        kelas,
+                        sekolah,
+                        alokasiWaktu,
+                        topikMateri,
+                        guruPenyusun,
+                        gayaDesain: selectedInfoStyle,
+                        rangkumanRaw: rawText,
+                        hasilMateriAjar: materiResult,
+                        tanggalEkspor: new Date().toISOString()
+                      });
+                    }}
+                    onOpenPromptAi={() => setShowPromptModal(true)}
+                  />
+
                   <button
                     onClick={handleCopyAndGoToDocs}
                     className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
@@ -916,6 +939,28 @@ export default function MateriAjarView() {
           )}
         </div>
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Materi Ajar Infografis PJOK"
+        subtitle={`${topikMateri} • Kelas ${kelas}`}
+        tabs={getSlideMateriPrompts(topikMateri)}
+        jsonData={{
+          mataPelajaran,
+          kelas,
+          sekolah,
+          alokasiWaktu,
+          topikMateri,
+          guruPenyusun,
+          gayaDesain: selectedInfoStyle,
+          rangkumanRaw: rawText,
+          hasilMateriAjar: materiResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`Materi_Ajar_${topikMateri.replace(/\s+/g, '_')}_Kelas_${kelas}`}
+      />
     </div>
   );
 }

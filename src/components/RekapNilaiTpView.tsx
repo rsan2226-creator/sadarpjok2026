@@ -23,7 +23,15 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { ClassData, Student } from '../types';
-import { downloadDocFile } from '../lib/exportUtils';
+import { downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getUlanganHarianPrompts, getRekapNilaiTpPrompts } from '../utils/aiPromptGenerators';
+import { TpItem, TpDailyScores, StudentSemesterScore, AssessmentWeights, StudentSemesterEvaluation } from './nilaiHarianTypes';
+import { GRADE_SEMESTER_TP_PRESETS, calculateStudentSemesterEval } from './nilaiHarianPresets';
+import DetailNilaiHarianTpTable from './DetailNilaiHarianTpTable';
+import RekapNilaiHarianSemesterTable from './RekapNilaiHarianSemesterTable';
+import RekapNilaiHarianSemuaTpTable from './RekapNilaiHarianSemuaTpTable';
 
 interface RekapNilaiTpViewProps {
   classes: ClassData[];
@@ -88,8 +96,13 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
   const [schoolYear, setSchoolYear] = useState('2026/2027');
   const [kktp, setKktp] = useState<number>(70); // Kriteria Ketercapaian Tujuan Pembelajaran
 
+  // View mode: 'all_daily_tp' (Rekap Nilai Harian Semua TP Lengkap) vs 'semester_rekap' (Rekap Nilai 1 Semester Rapor) vs 'daily_tp' (Detail Formatif per 1 TP) vs 'matrix' (Matriks Ringkas TP)
+  const [viewMode, setViewMode] = useState<'all_daily_tp' | 'semester_rekap' | 'daily_tp' | 'matrix'>('all_daily_tp');
+  const [activeTpId, setActiveTpId] = useState<string>('');
+  const [showSidebarSettings, setShowSidebarSettings] = useState(false);
+
   // TPs State
-  const [tps, setTps] = useState<{ id: string; code: string; text: string }[]>([]);
+  const [tps, setTps] = useState<TpItem[]>([]);
   const [newTpCode, setNewTpCode] = useState('');
   const [newTpText, setNewTpText] = useState('');
   const [isAddingTp, setIsAddingTp] = useState(false);
@@ -97,68 +110,211 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
   // Scores state: { [studentId]: { [tpId]: score } }
   const [scores, setScores] = useState<{ [studentId: string]: { [tpId: string]: number } }>({});
 
+  // Daily scores: { [studentId]: { [tpId]: { nh1, nh2, nh3, sumatifTp } } }
+  const [dailyScores, setDailyScores] = useState<{ [studentId: string]: { [tpId: string]: TpDailyScores } }>({});
+
+  // Semester scores: { [studentId]: { sts, sas } }
+  const [semesterScores, setSemesterScores] = useState<{ [studentId: string]: StudentSemesterScore }>({});
+
+  // Assessment weights: { tp: 2, sts: 1, sas: 1 } (50% TP, 25% STS, 25% SAS)
+  const [weights, setWeights] = useState<AssessmentWeights>({ tp: 2, sts: 1, sas: 1 });
+  const [showWeightConfig, setShowWeightConfig] = useState(false);
+
   // Institutional Signatures
   const [teacherName, setTeacherName] = useState('Sandi Rafsanjani, S.Pd.');
   const [teacherNip, setTeacherNip] = useState('19940812 202321 1 002');
   const [principalName, setPrincipalName] = useState('H. Ahmad Dahlan, M.Pd.');
   const [principalNip, setPrincipalNip] = useState('19780102 200501 1 003');
   const [printCity, setPrintCity] = useState('Jakarta');
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
-  // Load saved TPs and scores from localStorage on class change
+  // Load saved TPs, daily scores, and semester scores from localStorage on class or semester change
   useEffect(() => {
     if (!activeClass.id) return;
 
-    // Load TPs
-    const savedTps = localStorage.getItem(`rekap_tp_list_${activeClass.id}`);
+    const classPrefix = `${activeClass.id}_sm${semester}`;
+
+    // 1. Load TPs
+    const savedTps = localStorage.getItem(`rekap_tp_list_${classPrefix}`) || localStorage.getItem(`rekap_tp_list_${activeClass.id}`);
+    let loadedTps: TpItem[] = [];
     if (savedTps) {
-      setTps(JSON.parse(savedTps));
-    } else {
-      // Use defaults based on Grade
-      const gradePresets = GRADE_TP_PRESETS[activeClass.grade] || GRADE_TP_PRESETS[1];
-      const defaults = gradePresets.map((p, idx) => ({
-        id: `tp-${activeClass.id}-${idx + 1}`,
+      try {
+        loadedTps = JSON.parse(savedTps);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (!loadedTps || loadedTps.length === 0) {
+      const presets = GRADE_SEMESTER_TP_PRESETS[activeClass.grade]?.[semester] || GRADE_SEMESTER_TP_PRESETS[1][1];
+      loadedTps = presets.map((p, idx) => ({
+        id: `tp-${classPrefix}-${idx + 1}`,
         code: p.code,
         text: p.text
       }));
-      setTps(defaults);
-      localStorage.setItem(`rekap_tp_list_${activeClass.id}`, JSON.stringify(defaults));
+      localStorage.setItem(`rekap_tp_list_${classPrefix}`, JSON.stringify(loadedTps));
+    }
+    setTps(loadedTps);
+    if (loadedTps.length > 0) {
+      setActiveTpId(loadedTps[0].id);
     }
 
-    // Load Scores
-    const savedScores = localStorage.getItem(`rekap_tp_scores_${activeClass.id}`);
+    // 2. Load Daily Scores (NH1, NH2, NH3, Sumatif TP)
+    const savedDaily = localStorage.getItem(`rekap_tp_daily_${classPrefix}`);
+    let currentDaily: { [studentId: string]: { [tpId: string]: TpDailyScores } } = {};
+    if (savedDaily) {
+      try {
+        currentDaily = JSON.parse(savedDaily);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // 3. Load Overall TP Scores
+    const savedScores = localStorage.getItem(`rekap_tp_scores_${classPrefix}`) || localStorage.getItem(`rekap_tp_scores_${activeClass.id}`);
+    let currentScores: { [studentId: string]: { [tpId: string]: number } } = {};
     if (savedScores) {
-      setScores(JSON.parse(savedScores));
-    } else {
-      // Pre-fill with sensible random-ish or empty scores based on current student cognitive/psychomotor averages
-      const initialScores: { [studentId: string]: { [tpId: string]: number } } = {};
-      const gradePresets = GRADE_TP_PRESETS[activeClass.grade] || GRADE_TP_PRESETS[1];
-      
-      activeClass.students.forEach(student => {
-        initialScores[student.id] = {};
-        gradePresets.forEach((p, idx) => {
-          const tpId = `tp-${activeClass.id}-${idx + 1}`;
-          // Generate a score close to student's cognitive/psychomotor scores
-          const baseScore = Math.round((student.scores.cognitive + student.scores.psychomotor) / 2) || 80;
-          // Add a small deviation (-3 to +3)
-          const randomDeviation = Math.floor(Math.random() * 7) - 3;
-          initialScores[student.id][tpId] = Math.min(100, Math.max(0, baseScore + randomDeviation));
-        });
-      });
-      
-      setScores(initialScores);
-      localStorage.setItem(`rekap_tp_scores_${activeClass.id}`, JSON.stringify(initialScores));
+      try {
+        currentScores = JSON.parse(savedScores);
+      } catch (e) {
+        console.error(e);
+      }
     }
-  }, [activeClass.id, activeClass.grade, activeClass.students]);
 
-  // Save changes to localStorage helper
-  const saveTpsToStorage = (updatedTps: typeof tps) => {
+    // 4. Load Semester Scores (STS & SAS)
+    const savedSemesterScores = localStorage.getItem(`rekap_tp_semester_${classPrefix}`);
+    let currentSemesterScores: { [studentId: string]: StudentSemesterScore } = {};
+    if (savedSemesterScores) {
+      try {
+        currentSemesterScores = JSON.parse(savedSemesterScores);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Initialize missing student scores
+    activeClass.students.forEach(student => {
+      if (!currentDaily[student.id]) currentDaily[student.id] = {};
+      if (!currentScores[student.id]) currentScores[student.id] = {};
+
+      const baseScore = Math.round((student.scores.cognitive + student.scores.psychomotor) / 2) || 78;
+
+      loadedTps.forEach((tp, tIdx) => {
+        if (!currentDaily[student.id][tp.id]) {
+          const rand = ((student.id.charCodeAt(0) + tIdx * 3) % 9) - 4;
+          const nh1 = Math.min(100, Math.max(60, baseScore + rand));
+          const nh2 = Math.min(100, Math.max(60, baseScore + (rand > 0 ? rand - 1 : rand + 1)));
+          const nh3 = Math.min(100, Math.max(65, baseScore + 2));
+          const sumatif = Math.min(100, Math.max(60, baseScore + rand));
+          currentDaily[student.id][tp.id] = { nh1, nh2, nh3, sumatifTp: sumatif };
+        }
+
+        if (currentScores[student.id][tp.id] === undefined) {
+          const d = currentDaily[student.id][tp.id];
+          currentScores[student.id][tp.id] = Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+        }
+      });
+
+      if (!currentSemesterScores[student.id]) {
+        currentSemesterScores[student.id] = {
+          sts: Math.min(100, Math.max(65, baseScore)),
+          sas: Math.min(100, Math.max(65, baseScore + 1))
+        };
+      }
+    });
+
+    setDailyScores(currentDaily);
+    setScores(currentScores);
+    setSemesterScores(currentSemesterScores);
+
+    // Load Weights
+    const savedWeights = localStorage.getItem(`rekap_tp_weights_${classPrefix}`);
+    if (savedWeights) {
+      try {
+        setWeights(JSON.parse(savedWeights));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [activeClass.id, activeClass.grade, activeClass.students, semester]);
+
+  // Save helpers
+  const saveTpsToStorage = (updatedTps: TpItem[]) => {
     setTps(updatedTps);
-    localStorage.setItem(`rekap_tp_list_${activeClass.id}`, JSON.stringify(updatedTps));
+    localStorage.setItem(`rekap_tp_list_${activeClass.id}_sm${semester}`, JSON.stringify(updatedTps));
   };
 
   const saveScoresToStorage = (updatedScores: typeof scores) => {
     setScores(updatedScores);
-    localStorage.setItem(`rekap_tp_scores_${activeClass.id}`, JSON.stringify(updatedScores));
+    localStorage.setItem(`rekap_tp_scores_${activeClass.id}_sm${semester}`, JSON.stringify(updatedScores));
+  };
+
+  const saveDailyScoresToStorage = (updatedDaily: typeof dailyScores) => {
+    setDailyScores(updatedDaily);
+    localStorage.setItem(`rekap_tp_daily_${activeClass.id}_sm${semester}`, JSON.stringify(updatedDaily));
+  };
+
+  const saveSemesterScoresToStorage = (updatedSemester: typeof semesterScores) => {
+    setSemesterScores(updatedSemester);
+    localStorage.setItem(`rekap_tp_semester_${activeClass.id}_sm${semester}`, JSON.stringify(updatedSemester));
+  };
+
+  const saveWeightsToStorage = (updatedWeights: AssessmentWeights) => {
+    setWeights(updatedWeights);
+    localStorage.setItem(`rekap_tp_weights_${activeClass.id}_sm${semester}`, JSON.stringify(updatedWeights));
+  };
+
+  // Update specific daily score component (NH1, NH2, NH3, Sumatif TP)
+  const handleUpdateDailyScore = (studentId: string, tpId: string, field: keyof TpDailyScores, val: number) => {
+    const num = Math.min(100, Math.max(0, val || 0));
+    const currentStudentDaily = dailyScores[studentId]?.[tpId] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+    const updatedStudentDaily = { ...currentStudentDaily, [field]: num };
+
+    const newDaily = {
+      ...dailyScores,
+      [studentId]: {
+        ...dailyScores[studentId],
+        [tpId]: updatedStudentDaily
+      }
+    };
+    saveDailyScoresToStorage(newDaily);
+
+    // Automatically recalculate overall TP score
+    const newFinalScore = Math.round(
+      (updatedStudentDaily.nh1 + updatedStudentDaily.nh2 + updatedStudentDaily.nh3 + updatedStudentDaily.sumatifTp) / 4
+    );
+    const newScores = {
+      ...scores,
+      [studentId]: {
+        ...scores[studentId],
+        [tpId]: newFinalScore
+      }
+    };
+    saveScoresToStorage(newScores);
+  };
+
+  // Update overall TP score directly
+  const handleUpdateTpFinalScore = (studentId: string, tpId: string, val: number) => {
+    const num = Math.min(100, Math.max(0, val || 0));
+    const newScores = {
+      ...scores,
+      [studentId]: {
+        ...scores[studentId],
+        [tpId]: num
+      }
+    };
+    saveScoresToStorage(newScores);
+  };
+
+  // Update Semester Score (STS / SAS)
+  const handleUpdateSemesterScore = (studentId: string, field: 'sts' | 'sas', val: number) => {
+    const num = Math.min(100, Math.max(0, val || 0));
+    const current = semesterScores[studentId] || { sts: 75, sas: 75 };
+    const updated = { ...current, [field]: num };
+    const newSem = {
+      ...semesterScores,
+      [studentId]: updated
+    };
+    saveSemesterScoresToStorage(newSem);
   };
 
   // Add a new TP
@@ -225,17 +381,39 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
 
   // Simulate sensible scores for the entire class (testing helper)
   const handleAutoFill = () => {
-    if (window.confirm('Simulasikan pengisian nilai otomatis untuk kelas ini berdasarkan performa kognitif & psikomotorik siswa?')) {
+    if (window.confirm('Simulasikan pengisian nilai harian dan semester otomatis untuk kelas ini berdasarkan performa kognitif & psikomotorik siswa?')) {
       const updatedScores = { ...scores };
+      const updatedDaily = { ...dailyScores };
+      const updatedSemester = { ...semesterScores };
+
       activeClass.students.forEach(student => {
         updatedScores[student.id] = {};
-        tps.forEach(tp => {
-          const base = Math.round((student.scores.cognitive + student.scores.psychomotor) / 2) || 75;
-          const randomDeviation = Math.floor(Math.random() * 11) - 5; // -5 to +5
-          updatedScores[student.id][tp.id] = Math.min(100, Math.max(0, base + randomDeviation));
+        updatedDaily[student.id] = {};
+
+        const base = Math.round((student.scores.cognitive + student.scores.psychomotor) / 2) || 78;
+
+        tps.forEach((tp, tIdx) => {
+          const rand = Math.floor(Math.random() * 11) - 5; // -5 to +5
+          const nh1 = Math.min(100, Math.max(60, base + rand));
+          const nh2 = Math.min(100, Math.max(60, base + (rand > 0 ? rand - 2 : rand + 2)));
+          const nh3 = Math.min(100, Math.max(65, base + 2));
+          const sumatifTp = Math.min(100, Math.max(60, base + rand));
+
+          updatedDaily[student.id][tp.id] = { nh1, nh2, nh3, sumatifTp };
+          updatedScores[student.id][tp.id] = Math.round((nh1 + nh2 + nh3 + sumatifTp) / 4);
         });
+
+        const devSts = Math.floor(Math.random() * 9) - 4;
+        const devSas = Math.floor(Math.random() * 9) - 4;
+        updatedSemester[student.id] = {
+          sts: Math.min(100, Math.max(60, base + devSts)),
+          sas: Math.min(100, Math.max(60, base + devSas))
+        };
       });
+
       saveScoresToStorage(updatedScores);
+      saveDailyScoresToStorage(updatedDaily);
+      saveSemesterScoresToStorage(updatedSemester);
     }
   };
 
@@ -243,86 +421,49 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
   const handleClearScores = () => {
     if (window.confirm('Apakah Anda yakin ingin mereset seluruh nilai pada tabel ini menjadi 0?')) {
       const updatedScores = { ...scores };
+      const updatedDaily = { ...dailyScores };
+      const updatedSemester = { ...semesterScores };
+
       activeClass.students.forEach(student => {
         updatedScores[student.id] = {};
+        updatedDaily[student.id] = {};
         tps.forEach(tp => {
           updatedScores[student.id][tp.id] = 0;
+          updatedDaily[student.id][tp.id] = { nh1: 0, nh2: 0, nh3: 0, sumatifTp: 0 };
         });
+        updatedSemester[student.id] = { sts: 0, sas: 0 };
       });
+
       saveScoresToStorage(updatedScores);
+      saveDailyScoresToStorage(updatedDaily);
+      saveSemesterScoresToStorage(updatedSemester);
     }
   };
 
-  // Calculate stats for each student
+  // Calculate comprehensive semester evaluations for each student
+  const evaluations: StudentSemesterEvaluation[] = useMemo(() => {
+    return activeClass.students.map(student => {
+      return calculateStudentSemesterEval(student, tps, scores, dailyScores, semesterScores, weights, kktp);
+    });
+  }, [activeClass.students, tps, scores, dailyScores, semesterScores, weights, kktp]);
+
+  // Per-student statistics mapping for convenient access across components and tables
   const studentStats = useMemo(() => {
-    const stats: { 
-      [studentId: string]: { 
-        average: number; 
-        isPassed: boolean; 
-        passedCount: number; 
-        failedCount: number; 
-      } 
-    } = {};
-
-    activeClass.students.forEach(student => {
-      const studentScores = scores[student.id] || {};
-      let total = 0;
-      let count = 0;
-      let passedCount = 0;
-      let failedCount = 0;
-
-      tps.forEach(tp => {
-        const score = studentScores[tp.id] ?? 0;
-        total += score;
-        count++;
-        if (score >= kktp) {
-          passedCount++;
-        } else {
-          failedCount++;
-        }
-      });
-
-      const average = count > 0 ? Math.round(total / count) : 0;
-      stats[student.id] = {
-        average,
-        isPassed: average >= kktp,
-        passedCount,
-        failedCount
+    const map: { [studentId: string]: { average: number; isPassed: boolean; evaluation: StudentSemesterEvaluation } } = {};
+    evaluations.forEach(ev => {
+      map[ev.studentId] = {
+        average: ev.rerataTp,
+        isPassed: ev.isPassed,
+        evaluation: ev
       };
     });
+    return map;
+  }, [evaluations]);
 
-    return stats;
-  }, [activeClass.students, tps, scores, kktp]);
-
-  // Overall class statistics summary
-  const summaryStats = useMemo(() => {
-    const studentList = activeClass.students;
-    if (studentList.length === 0) {
-      return { classAverage: 0, passedPercent: 0, totalPassed: 0, totalFailed: 0 };
-    }
-
-    let totalSum = 0;
-    let passedCount = 0;
-
-    studentList.forEach(student => {
-      const avg = studentStats[student.id]?.average || 0;
-      totalSum += avg;
-      if (avg >= kktp) {
-        passedCount++;
-      }
-    });
-
-    const totalStudents = studentList.length;
-    const classAverage = Math.round(totalSum / totalStudents);
-    const passedPercent = Math.round((passedCount / totalStudents) * 100);
-
-    return {
-      classAverage,
-      passedPercent,
-      totalPassed: passedCount,
-      totalFailed: totalStudents - passedCount
-    };
-  }, [activeClass.students, studentStats, kktp]);
+  // Currently selected TP for detailed formative scoring view
+  const currentActiveTp: TpItem = useMemo(() => {
+    return tps.find(t => t.id === activeTpId) || tps[0] || { id: 'tp-default', code: 'TP 1.1', text: 'Tujuan Pembelajaran' };
+  }, [tps, activeTpId]);
 
   // Average score per TP column
   const tpClassAverages = useMemo(() => {
@@ -330,59 +471,187 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
     tps.forEach(tp => {
       let sum = 0;
       let count = 0;
-      activeClass.students.forEach(student => {
-        const studentScores = scores[student.id] || {};
-        const score = studentScores[tp.id];
-        if (score !== undefined) {
-          sum += score;
+      evaluations.forEach(ev => {
+        const val = ev.tpScores[tp.id];
+        if (val !== undefined) {
+          sum += val;
           count++;
         }
       });
       averages[tp.id] = count > 0 ? Math.round(sum / count) : 0;
     });
     return averages;
-  }, [activeClass.students, tps, scores]);
+  }, [tps, evaluations]);
+
+  // Overall class statistics summary
+  const summaryStats = useMemo(() => {
+    const studentList = activeClass.students;
+    if (studentList.length === 0 || evaluations.length === 0) {
+      return {
+        classAverage: 0,
+        classRerataTpAverage: 0,
+        classStsAverage: 0,
+        classSasAverage: 0,
+        passedPercent: 0,
+        totalPassed: 0,
+        totalFailed: 0
+      };
+    }
+
+    let sumFinal = 0;
+    let sumRerataTp = 0;
+    let sumSts = 0;
+    let sumSas = 0;
+    let totalPassed = 0;
+
+    evaluations.forEach(ev => {
+      sumFinal += ev.nilaiAkhirSemester;
+      sumRerataTp += ev.rerataTp;
+      sumSts += ev.sts;
+      sumSas += ev.sas;
+      if (ev.isPassed) totalPassed++;
+    });
+
+    const totalStudents = evaluations.length;
+    return {
+      classAverage: Math.round(sumFinal / totalStudents),
+      classRerataTpAverage: Math.round(sumRerataTp / totalStudents),
+      classStsAverage: Math.round(sumSts / totalStudents),
+      classSasAverage: Math.round(sumSas / totalStudents),
+      passedPercent: Math.round((totalPassed / totalStudents) * 100),
+      totalPassed,
+      totalFailed: totalStudents - totalPassed
+    };
+  }, [activeClass.students, evaluations]);
 
   // CSV Export handler
   const handleExportCsv = () => {
-    let csv = `REKAP NILAI HARIAN PER TUJUAN PEMBELAJARAN (TP)\n`;
-    csv += `Mata Pelajaran: ${subject}\n`;
-    csv += `Kelas: ${activeClass.name}\n`;
-    csv += `Semester: ${semester}\n`;
-    csv += `Tahun Pelajaran: ${schoolYear}\n`;
-    csv += `KKTP Threshold: ${kktp}\n\n`;
+    let csv = '';
+    if (viewMode === 'all_daily_tp') {
+      csv = `REKAPITULASI NILAI HARIAN SEMUA TUJUAN PEMBELAJARAN (TP) - FORMATIF & SUMATIF\n`;
+      csv += `Mata Pelajaran: ${subject}\n`;
+      csv += `Kelas: ${activeClass.name}\n`;
+      csv += `Semester: ${semester}\n`;
+      csv += `Tahun Pelajaran: ${schoolYear}\n`;
+      csv += `KKTP Threshold: ${kktp}\n\n`;
 
-    // Headers
-    csv += `No,Nama Siswa,L/P,`;
-    tps.forEach(tp => {
-      csv += `"${tp.code} - ${tp.text.replace(/"/g, '""')}",`;
-    });
-    csv += `Rata-rata,Ketuntasan\n`;
-
-    // Data rows
-    activeClass.students.forEach((student, idx) => {
-      csv += `${idx + 1},"${student.name}","${student.gender}",`;
+      csv += `No,Nama Peserta Didik,L/P,`;
       tps.forEach(tp => {
-        const score = scores[student.id]?.[tp.id] ?? 0;
-        csv += `${score},`;
+        csv += `"${tp.code} NH1 (Praktik)","${tp.code} NH2 (Teori)","${tp.code} NH3 (Tugas)","${tp.code} S-TP","${tp.code} N-TP",`;
       });
-      const avg = studentStats[student.id]?.average || 0;
-      const status = avg >= kktp ? 'Tuntas' : 'Perlu Remedial';
-      csv += `${avg},"${status}"\n`;
-    });
+      csv += `Rerata Harian (R-TP),Predikat,Status Ketuntasan\n`;
 
-    // Class average footer
-    csv += `,,Rata-rata Kelas,`;
-    tps.forEach(tp => {
-      csv += `${tpClassAverages[tp.id]},`;
-    });
-    csv += `${summaryStats.classAverage},\n`;
+      activeClass.students.forEach((student, idx) => {
+        csv += `${idx + 1},"${student.name}","${student.gender}",`;
+        let studentTotal = 0;
+        tps.forEach(tp => {
+          const d = dailyScores[student.id]?.[tp.id] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+          const explicitFinal = scores[student.id]?.[tp.id];
+          const finalScore = explicitFinal !== undefined ? explicitFinal : Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+          studentTotal += finalScore;
+          csv += `${d.nh1},${d.nh2},${d.nh3},${d.sumatifTp},${finalScore},`;
+        });
+        const rTp = tps.length > 0 ? Math.round(studentTotal / tps.length) : 75;
+        const pred = rTp >= 90 ? 'A' : rTp >= 80 ? 'B' : rTp >= 70 ? 'C' : 'D';
+        const status = rTp >= kktp ? 'Tuntas' : 'Remedial';
+        csv += `${rTp},"${pred}","${status}"\n`;
+      });
+
+      // Class average row
+      csv += `,,Rata-rata Kelas,`;
+      tps.forEach(tp => {
+        let sumNh1 = 0, sumNh2 = 0, sumNh3 = 0, sumSumatif = 0, sumFinal = 0;
+        const count = activeClass.students.length || 1;
+        activeClass.students.forEach(student => {
+          const d = dailyScores[student.id]?.[tp.id] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+          const explicitFinal = scores[student.id]?.[tp.id];
+          const finalScore = explicitFinal !== undefined ? explicitFinal : Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+          sumNh1 += d.nh1;
+          sumNh2 += d.nh2;
+          sumNh3 += d.nh3;
+          sumSumatif += d.sumatifTp;
+          sumFinal += finalScore;
+        });
+        csv += `${Math.round(sumNh1 / count)},${Math.round(sumNh2 / count)},${Math.round(sumNh3 / count)},${Math.round(sumSumatif / count)},${Math.round(sumFinal / count)},`;
+      });
+      csv += `${summaryStats.classRerataTpAverage},,${summaryStats.passedPercent}% Tuntas\n`;
+    } else if (viewMode === 'semester_rekap') {
+      csv = `REKAPITULASI NILAI HARIAN PER TP 1 SEMESTER LENGKAP (KURIKULUM MERDEKA)\n`;
+      csv += `Mata Pelajaran: ${subject}\n`;
+      csv += `Kelas: ${activeClass.name}\n`;
+      csv += `Semester: ${semester}\n`;
+      csv += `Tahun Pelajaran: ${schoolYear}\n`;
+      csv += `KKTP Threshold: ${kktp}\n\n`;
+
+      csv += `No,Nama Peserta Didik,L/P,`;
+      tps.forEach(tp => {
+        csv += `"${tp.code} - ${tp.text.replace(/"/g, '""')}",`;
+      });
+      csv += `Rerata TP,STS,SAS,Nilai Akhir (NA),Predikat,Status Ketuntasan,Deskripsi Capaian Rapor Kurikulum Merdeka\n`;
+
+      evaluations.forEach((ev, idx) => {
+        csv += `${idx + 1},"${ev.studentName}","${ev.gender}",`;
+        tps.forEach(tp => {
+          csv += `${ev.tpScores[tp.id] ?? 0},`;
+        });
+        csv += `${ev.rerataTp},${ev.sts},${ev.sas},${ev.nilaiAkhirSemester},"${ev.predikat}","${ev.isPassed ? 'Tuntas' : 'Remedial'}","${ev.deskripsiRapor.replace(/"/g, '""')}"\n`;
+      });
+
+      csv += `,,Rata-rata Kelas,`;
+      tps.forEach(tp => {
+        csv += `${tpClassAverages[tp.id] || 0},`;
+      });
+      csv += `${summaryStats.classRerataTpAverage},${summaryStats.classStsAverage},${summaryStats.classSasAverage},${summaryStats.classAverage},,${summaryStats.passedPercent}% Tuntas,\n`;
+    } else if (viewMode === 'daily_tp') {
+      csv = `DETAIL ASESMEN FORMATIF HARIAN PER TP (${currentActiveTp.code})\n`;
+      csv += `Mata Pelajaran: ${subject}\n`;
+      csv += `Tujuan Pembelajaran: "${currentActiveTp.text.replace(/"/g, '""')}"\n`;
+      csv += `Kelas: ${activeClass.name} | Semester: ${semester} | KKTP: ${kktp}\n\n`;
+
+      csv += `No,Nama Peserta Didik,L/P,NH1 (Praktik),NH2 (Teori),NH3 (Tugas),Sumatif TP,Nilai Akhir TP,Ketuntasan\n`;
+      activeClass.students.forEach((student, idx) => {
+        const d = dailyScores[student.id]?.[currentActiveTp.id] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+        const finalScore = scores[student.id]?.[currentActiveTp.id] ?? Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+        const status = finalScore >= kktp ? 'Tuntas' : 'Remedial';
+        csv += `${idx + 1},"${student.name}","${student.gender}",${d.nh1},${d.nh2},${d.nh3},${d.sumatifTp},${finalScore},"${status}"\n`;
+      });
+    } else {
+      csv = `REKAP NILAI HARIAN PER TUJUAN PEMBELAJARAN (TP)\n`;
+      csv += `Mata Pelajaran: ${subject}\n`;
+      csv += `Kelas: ${activeClass.name}\n`;
+      csv += `Semester: ${semester}\n`;
+      csv += `Tahun Pelajaran: ${schoolYear}\n`;
+      csv += `KKTP Threshold: ${kktp}\n\n`;
+
+      csv += `No,Nama Siswa,L/P,`;
+      tps.forEach(tp => {
+        csv += `"${tp.code} - ${tp.text.replace(/"/g, '""')}",`;
+      });
+      csv += `Rata-rata,Ketuntasan\n`;
+
+      activeClass.students.forEach((student, idx) => {
+        csv += `${idx + 1},"${student.name}","${student.gender}",`;
+        tps.forEach(tp => {
+          const score = scores[student.id]?.[tp.id] ?? 0;
+          csv += `${score},`;
+        });
+        const avg = studentStats[student.id]?.average || 0;
+        const status = avg >= kktp ? 'Tuntas' : 'Perlu Remedial';
+        csv += `${avg},"${status}"\n`;
+      });
+
+      csv += `,,Rata-rata Kelas,`;
+      tps.forEach(tp => {
+        csv += `${tpClassAverages[tp.id]},`;
+      });
+      csv += `${summaryStats.classAverage},\n`;
+    }
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `Rekap_Nilai_TP_${activeClass.name.replace(/\s+/g, '_')}_Sm${semester}.csv`);
+    link.setAttribute('download', `Rekap_Nilai_TP_${activeClass.name.replace(/\s+/g, '_')}_Sm${semester}_${viewMode}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -390,32 +659,189 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
 
   // Word Document Export handler
   const handleExportWord = () => {
-    const fullHtml = `
-      <div style="font-family: 'Times New Roman', Times, serif; padding: 20px; line-height: 1.5; color: #000;">
-        <div style="text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 20px;">
-          <h2 style="margin: 0; text-transform: uppercase; font-size: 14pt;">LAPORAN REKAPITULASI NILAI HARIAN PER TP</h2>
-          <p style="margin: 5px 0 0 0; font-size: 11pt;">Mata Pelajaran: <strong>${subject}</strong> | Tahun Pelajaran: ${schoolYear}</p>
-          <p style="margin: 2px 0 0 0; font-size: 10pt;">Kelas: ${activeClass.name} &bull; Semester: ${semester} &bull; KKTP: ${kktp}</p>
-        </div>
-
-        <h3 style="font-size: 12pt; text-transform: uppercase; margin-bottom: 8px;">A. Daftar Tujuan Pembelajaran (TP)</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt;">
+    let mainTableSection = '';
+    if (viewMode === 'all_daily_tp') {
+      mainTableSection = `
+        <h3 style="font-size: 12pt; text-transform: uppercase; margin-bottom: 8px;">B. Rekapitulasi Nilai Harian Semua TP (Formatif &amp; Sumatif Lengkap)</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 7.5pt; text-align: center;">
           <thead>
-            <tr style="background-color: #f1f5f9;">
-              <th style="border: 1px solid #000; padding: 6px; text-align: left; width: 15%;">Kode TP</th>
-              <th style="border: 1px solid #000; padding: 6px; text-align: left;">Deskripsi Kompetensi / Tujuan Pembelajaran</th>
+            <tr style="background-color: #0f172a; color: #ffffff; font-weight: bold;">
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">No</th>
+              <th style="border: 1px solid #000; padding: 4px; text-align: left;" rowspan="2">Nama Peserta Didik</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">L/P</th>
+              ${tps.map(tp => `
+                <th style="border: 1px solid #000; padding: 4px;" colspan="5">${tp.code}</th>
+              `).join('')}
+              <th style="border: 1px solid #000; padding: 4px; background-color: #065f46;" rowspan="2">R-TP</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">Pred</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">Status</th>
+            </tr>
+            <tr style="background-color: #1e293b; color: #ffffff; font-weight: bold; font-size: 7pt;">
+              ${tps.map(tp => `
+                <th style="border: 1px solid #000; padding: 2px;">NH1</th>
+                <th style="border: 1px solid #000; padding: 2px;">NH2</th>
+                <th style="border: 1px solid #000; padding: 2px;">NH3</th>
+                <th style="border: 1px solid #000; padding: 2px; background-color: #fffbeb; color: #78350f;">S-TP</th>
+                <th style="border: 1px solid #000; padding: 2px; background-color: #047857; color: #ffffff;">N-TP</th>
+              `).join('')}
             </tr>
           </thead>
           <tbody>
-            ${tps.map(tp => `
-              <tr>
-                <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${tp.code}</td>
-                <td style="border: 1px solid #000; padding: 6px;">${tp.text}</td>
-              </tr>
-            `).join('')}
+            ${activeClass.students.map((student, idx) => {
+              let totalTp = 0;
+              const tpCols = tps.map(tp => {
+                const d = dailyScores[student.id]?.[tp.id] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+                const explicitFinal = scores[student.id]?.[tp.id];
+                const finalScore = explicitFinal !== undefined ? explicitFinal : Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+                totalTp += finalScore;
+                return `
+                  <td style="border: 1px solid #000; padding: 2px;">${d.nh1}</td>
+                  <td style="border: 1px solid #000; padding: 2px;">${d.nh2}</td>
+                  <td style="border: 1px solid #000; padding: 2px;">${d.nh3}</td>
+                  <td style="border: 1px solid #000; padding: 2px; background-color: #fffbeb;">${d.sumatifTp}</td>
+                  <td style="border: 1px solid #000; padding: 2px; font-weight: bold; background-color: #ecfdf5;">${finalScore}</td>
+                `;
+              }).join('');
+
+              const rTp = tps.length > 0 ? Math.round(totalTp / tps.length) : 75;
+              const pred = rTp >= 90 ? 'A' : rTp >= 80 ? 'B' : rTp >= 70 ? 'C' : 'D';
+              const status = rTp >= kktp ? 'Tuntas' : 'Remedial';
+
+              return `
+                <tr style="${idx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+                  <td style="border: 1px solid #000; padding: 2px;">${idx + 1}</td>
+                  <td style="border: 1px solid #000; padding: 2px; text-align: left;"><strong>${student.name}</strong></td>
+                  <td style="border: 1px solid #000; padding: 2px;">${student.gender}</td>
+                  ${tpCols}
+                  <td style="border: 1px solid #000; padding: 2px; font-weight: bold; background-color: #d1fae5;">${rTp}</td>
+                  <td style="border: 1px solid #000; padding: 2px; font-weight: bold;">${pred}</td>
+                  <td style="border: 1px solid #000; padding: 2px; font-weight: bold; color: ${rTp >= kktp ? '#16a34a' : '#dc2626'};">${status}</td>
+                </tr>
+              `;
+            }).join('')}
+            <tr style="font-weight: bold; background-color: #e2e8f0;">
+              <td colspan="3" style="border: 1px solid #000; padding: 3px; text-align: right;">RATA-RATA KELAS:</td>
+              ${tps.map(tp => {
+                let sumNh1 = 0, sumNh2 = 0, sumNh3 = 0, sumSumatif = 0, sumFinal = 0;
+                const count = activeClass.students.length || 1;
+                activeClass.students.forEach(student => {
+                  const d = dailyScores[student.id]?.[tp.id] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+                  const explicitFinal = scores[student.id]?.[tp.id];
+                  const finalScore = explicitFinal !== undefined ? explicitFinal : Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+                  sumNh1 += d.nh1;
+                  sumNh2 += d.nh2;
+                  sumNh3 += d.nh3;
+                  sumSumatif += d.sumatifTp;
+                  sumFinal += finalScore;
+                });
+                return `
+                  <td style="border: 1px solid #000; padding: 2px;">${Math.round(sumNh1 / count)}</td>
+                  <td style="border: 1px solid #000; padding: 2px;">${Math.round(sumNh2 / count)}</td>
+                  <td style="border: 1px solid #000; padding: 2px;">${Math.round(sumNh3 / count)}</td>
+                  <td style="border: 1px solid #000; padding: 2px;">${Math.round(sumSumatif / count)}</td>
+                  <td style="border: 1px solid #000; padding: 2px; background-color: #a7f3d0;">${Math.round(sumFinal / count)}</td>
+                `;
+              }).join('')}
+              <td style="border: 1px solid #000; padding: 3px; background-color: #6ee7b7;">${summaryStats.classRerataTpAverage}</td>
+              <td style="border: 1px solid #000; padding: 3px;">-</td>
+              <td style="border: 1px solid #000; padding: 3px; color: #16a34a;">${summaryStats.passedPercent}% Tuntas</td>
+            </tr>
           </tbody>
         </table>
-
+      `;
+    } else if (viewMode === 'semester_rekap') {
+      mainTableSection = `
+        <h3 style="font-size: 12pt; text-transform: uppercase; margin-bottom: 8px;">B. Rekapitulasi Nilai Harian per TP 1 Semester Lengkap</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; text-align: center;">
+          <thead>
+            <tr style="background-color: #0f172a; color: #ffffff; font-weight: bold;">
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">No</th>
+              <th style="border: 1px solid #000; padding: 4px; text-align: left;" rowspan="2">Nama Peserta Didik</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">L/P</th>
+              <th style="border: 1px solid #000; padding: 4px;" colspan="${tps.length}">Nilai Harian per TP</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">R-TP</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">STS</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">SAS</th>
+              <th style="border: 1px solid #000; padding: 4px; background-color: #065f46;" rowspan="2">NA</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">Pred</th>
+              <th style="border: 1px solid #000; padding: 4px;" rowspan="2">Status</th>
+              <th style="border: 1px solid #000; padding: 4px; text-align: left;" rowspan="2">Deskripsi Capaian Rapor</th>
+            </tr>
+            <tr style="background-color: #1e293b; color: #ffffff; font-weight: bold; font-size: 8pt;">
+              ${tps.map(tp => `<th style="border: 1px solid #000; padding: 3px;">${tp.code}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${evaluations.map((ev, idx) => `
+              <tr style="${idx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+                <td style="border: 1px solid #000; padding: 3px;">${idx + 1}</td>
+                <td style="border: 1px solid #000; padding: 3px; text-align: left;"><strong>${ev.studentName}</strong></td>
+                <td style="border: 1px solid #000; padding: 3px;">${ev.gender}</td>
+                ${tps.map(tp => `<td style="border: 1px solid #000; padding: 3px;">${ev.tpScores[tp.id] ?? '-'}</td>`).join('')}
+                <td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${ev.rerataTp}</td>
+                <td style="border: 1px solid #000; padding: 3px;">${ev.sts}</td>
+                <td style="border: 1px solid #000; padding: 3px;">${ev.sas}</td>
+                <td style="border: 1px solid #000; padding: 3px; font-weight: bold; background-color: #ecfdf5;">${ev.nilaiAkhirSemester}</td>
+                <td style="border: 1px solid #000; padding: 3px; font-weight: bold;">${ev.predikat.charAt(0)}</td>
+                <td style="border: 1px solid #000; padding: 3px; font-weight: bold; color: ${ev.isPassed ? '#16a34a' : '#dc2626'};">${ev.isPassed ? 'Tuntas' : 'Remedial'}</td>
+                <td style="border: 1px solid #000; padding: 3px; text-align: left; font-size: 7.5pt;">${ev.deskripsiRapor}</td>
+              </tr>
+            `).join('')}
+            <tr style="font-weight: bold; background-color: #e2e8f0;">
+              <td colspan="3" style="border: 1px solid #000; padding: 4px; text-align: right;">RERATA KELAS:</td>
+              ${tps.map(tp => `<td style="border: 1px solid #000; padding: 4px;">${tpClassAverages[tp.id] || 0}</td>`).join('')}
+              <td style="border: 1px solid #000; padding: 4px;">${summaryStats.classRerataTpAverage}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${summaryStats.classStsAverage}</td>
+              <td style="border: 1px solid #000; padding: 4px;">${summaryStats.classSasAverage}</td>
+              <td style="border: 1px solid #000; padding: 4px; background-color: #d1fae5;">${summaryStats.classAverage}</td>
+              <td colspan="2" style="border: 1px solid #000; padding: 4px; color: #16a34a;">${summaryStats.passedPercent}% Tuntas</td>
+              <td style="border: 1px solid #000; padding: 4px; font-size: 8pt;">${summaryStats.totalPassed} Tuntas, ${summaryStats.totalFailed} Remedial</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+    } else if (viewMode === 'daily_tp') {
+      mainTableSection = `
+        <h3 style="font-size: 12pt; text-transform: uppercase; margin-bottom: 8px;">B. Detail Asesmen Formatif Harian: ${currentActiveTp.code}</h3>
+        <p style="font-size: 10pt; margin-bottom: 12px;">Kompetensi: <em>${currentActiveTp.text}</em></p>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt; text-align: center;">
+          <thead>
+            <tr style="background-color: #0f172a; color: #ffffff; font-weight: bold;">
+              <th style="border: 1px solid #000; padding: 6px; width: 5%;">No</th>
+              <th style="border: 1px solid #000; padding: 6px; text-align: left; width: 28%;">Nama Siswa</th>
+              <th style="border: 1px solid #000; padding: 6px; width: 7%;">L/P</th>
+              <th style="border: 1px solid #000; padding: 6px;">NH1 (Praktik)</th>
+              <th style="border: 1px solid #000; padding: 6px;">NH2 (Teori)</th>
+              <th style="border: 1px solid #000; padding: 6px;">NH3 (Tugas)</th>
+              <th style="border: 1px solid #000; padding: 6px;">Sumatif TP</th>
+              <th style="border: 1px solid #000; padding: 6px; background-color: #065f46;">Nilai Akhir TP</th>
+              <th style="border: 1px solid #000; padding: 6px;">Ketuntasan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${activeClass.students.map((student, idx) => {
+              const d = dailyScores[student.id]?.[currentActiveTp.id] || { nh1: 75, nh2: 75, nh3: 75, sumatifTp: 75 };
+              const f = scores[student.id]?.[currentActiveTp.id] ?? Math.round((d.nh1 + d.nh2 + d.nh3 + d.sumatifTp) / 4);
+              const status = f >= kktp ? 'Tuntas' : 'Remedial';
+              return `
+                <tr style="${idx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+                  <td style="border: 1px solid #000; padding: 5px;">${idx + 1}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: left;"><strong>${student.name}</strong></td>
+                  <td style="border: 1px solid #000; padding: 5px;">${student.gender}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${d.nh1}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${d.nh2}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${d.nh3}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${d.sumatifTp}</td>
+                  <td style="border: 1px solid #000; padding: 5px; font-weight: bold; background-color: #ecfdf5;">${f}</td>
+                  <td style="border: 1px solid #000; padding: 5px; font-weight: bold; color: ${f >= kktp ? '#16a34a' : '#dc2626'}">${status}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    } else {
+      mainTableSection = `
         <h3 style="font-size: 12pt; text-transform: uppercase; margin-bottom: 8px;">B. Matriks Laporan Nilai Siswa</h3>
         <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt; text-align: center;">
           <thead>
@@ -454,6 +880,44 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
             </tr>
           </tbody>
         </table>
+      `;
+    }
+
+    const fullHtml = `
+      <div style="font-family: 'Times New Roman', Times, serif; padding: 20px; line-height: 1.5; color: #000;">
+        <div style="text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 20px;">
+          <h2 style="margin: 0; text-transform: uppercase; font-size: 14pt;">
+            ${viewMode === 'all_daily_tp'
+              ? 'LAPORAN REKAPITULASI NILAI HARIAN SEMUA TP (FORMATIF & SUMATIF LENGKAP)'
+              : viewMode === 'semester_rekap' 
+              ? 'LAPORAN REKAPITULASI NILAI HARIAN PER TP 1 SEMESTER LENGKAP' 
+              : viewMode === 'daily_tp' 
+              ? `LAPORAN ASESMEN FORMATIF HARIAN (${currentActiveTp.code})` 
+              : 'LAPORAN REKAPITULASI NILAI HARIAN PER TP'}
+          </h2>
+          <p style="margin: 5px 0 0 0; font-size: 11pt;">Mata Pelajaran: <strong>${subject}</strong> | Tahun Pelajaran: ${schoolYear}</p>
+          <p style="margin: 2px 0 0 0; font-size: 10pt;">Kelas: ${activeClass.name} &bull; Semester: ${semester} &bull; KKTP: ${kktp}</p>
+        </div>
+
+        <h3 style="font-size: 12pt; text-transform: uppercase; margin-bottom: 8px;">A. Daftar Tujuan Pembelajaran (TP)</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt;">
+          <thead>
+            <tr style="background-color: #f1f5f9;">
+              <th style="border: 1px solid #000; padding: 6px; text-align: left; width: 15%;">Kode TP</th>
+              <th style="border: 1px solid #000; padding: 6px; text-align: left;">Deskripsi Kompetensi / Tujuan Pembelajaran</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tps.map(tp => `
+              <tr>
+                <td style="border: 1px solid #000; padding: 6px; font-weight: bold;">${tp.code}</td>
+                <td style="border: 1px solid #000; padding: 6px;">${tp.text}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        ${mainTableSection}
 
         <div style="margin-top: 40px; font-size: 11pt;">
           <table style="width: 100%; border: none;">
@@ -479,7 +943,7 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
       </div>
     `;
 
-    downloadDocFile(`Rekap_Nilai_TP_Kelas_${activeClass.name.replace(/\s+/g, '_')}`, fullHtml);
+    downloadDocFile(`Rekap_Nilai_TP_Kelas_${activeClass.name.replace(/\s+/g, '_')}_Sem_${semester}_${viewMode}`, fullHtml);
   };
 
   return (
@@ -490,17 +954,38 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
         <div className="absolute right-0 top-0 opacity-10 translate-x-12 -translate-y-12 pointer-events-none">
           <Calculator className="w-80 h-80" />
         </div>
-        <div className="relative z-10 space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-200 text-xs font-bold uppercase tracking-wider">
-            <Award className="w-4 h-4 text-cyan-400" />
-            Administrasi Kurikulum Merdeka
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-200 text-xs font-bold uppercase tracking-wider">
+              <Award className="w-4 h-4 text-cyan-400" />
+              Administrasi Kurikulum Merdeka
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
+              Rekap Nilai Per Tujuan Pembelajaran (TP)
+            </h2>
+            <p className="text-cyan-100 text-xs sm:text-sm max-w-4xl leading-relaxed">
+              Kelola, hitung, dan petakan ketuntasan kriteria belajar (KKTP) siswa per Kompetensi Dasar/Tujuan Pembelajaran secara digital. Menghasilkan rata-rata akhir otomatis untuk pelaporan rapor yang rapi dan terstandarisasi.
+            </p>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
-            Rekap Nilai Per Tujuan Pembelajaran (TP)
-          </h2>
-          <p className="text-cyan-100 text-xs sm:text-sm max-w-4xl leading-relaxed">
-            Kelola, hitung, dan petakan ketuntasan kriteria belajar (KKTP) siswa per Kompetensi Dasar/Tujuan Pembelajaran secara digital. Menghasilkan rata-rata akhir otomatis untuk pelaporan rapor yang rapi dan terstandarisasi.
-          </p>
+          <div className="shrink-0 bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/20">
+            <ExportJsonPromptAiButtons
+              onExportJson={() => {
+                const filename = `Rekap_Nilai_TP_${activeClass.name.replace(/\s+/g, '_')}.json`;
+                downloadJsonFile(filename, {
+                  kelas: activeClass.name,
+                  grade: activeClass.grade,
+                  subject,
+                  semester,
+                  schoolYear,
+                  kktp,
+                  tps,
+                  scores,
+                  summaryStats
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
+          </div>
         </div>
       </div>
 
@@ -639,12 +1124,171 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
         </div>
       </div>
 
+      {/* View Mode Navigation Tabs */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs mb-6 no-print">
+        <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setViewMode('all_daily_tp')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'all_daily_tp'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Rekap Nilai Harian Semua TP</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-white/20 uppercase font-black">Lengkap</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('semester_rekap')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'semester_rekap'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>Rekap 1 Semester (Rapor PJOK)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('daily_tp')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'daily_tp'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>Input Khusus per 1 TP</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewMode('matrix')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              viewMode === 'matrix'
+                ? 'bg-teal-700 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Matriks Ringkas TP</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {viewMode === 'daily_tp' && tps.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-teal-50 px-3 py-1.5 rounded-xl border border-teal-200">
+              <span className="text-xs font-bold text-teal-800">Pilih TP:</span>
+              <select
+                value={activeTpId}
+                onChange={(e) => setActiveTpId(e.target.value)}
+                className="text-xs font-extrabold text-teal-900 bg-white border border-teal-300 rounded px-2 py-1"
+              >
+                {tps.map(tp => (
+                  <option key={tp.id} value={tp.id}>
+                    {tp.code} - {tp.text.length > 30 ? tp.text.substring(0, 30) + '...' : tp.text}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {viewMode === 'semester_rekap' && (
+            <button
+              type="button"
+              onClick={() => setShowWeightConfig(!showWeightConfig)}
+              className="px-3 py-1.5 rounded-lg border border-slate-250 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span>Bobot: TP({weights.tp}) STS({weights.sts}) SAS({weights.sas})</span>
+              <Edit3 className="w-3.5 h-3.5 text-teal-600" />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowSidebarSettings(!showSidebarSettings)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              showSidebarSettings 
+                ? 'bg-slate-800 text-white' 
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-250'
+            }`}
+            title="Tampilkan / Sembunyikan panel kelola TP dan Tanda Tangan"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>{showSidebarSettings ? 'Sembunyikan Panel TP & TTD' : 'Kelola TP & TTD'}</span>
+          </button>
+        </div>
+      </div>
+
+      {showWeightConfig && (
+        <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 mb-6 text-xs text-amber-900 no-print flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h4 className="font-extrabold flex items-center gap-1.5 text-amber-950">
+              <Calculator className="w-4 h-4 text-amber-600" />
+              Atur Bobot Penilaian Nilai Akhir (NA) Semester
+            </h4>
+            <p className="text-[11px] text-amber-800">
+              Rumus: NA = [(Bobot TP × Rerata TP) + (Bobot STS × Nilai STS) + (Bobot SAS × Nilai SAS)] ÷ Total Bobot
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1 font-bold">
+              <span>Bobot TP:</span>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={weights.tp}
+                onChange={(e) => saveWeightsToStorage({ ...weights, tp: Math.max(1, Number(e.target.value)) })}
+                className="w-12 px-2 py-1 bg-white border border-amber-300 rounded font-bold text-center"
+              />
+            </label>
+            <label className="flex items-center gap-1 font-bold">
+              <span>Bobot STS:</span>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={weights.sts}
+                onChange={(e) => saveWeightsToStorage({ ...weights, sts: Math.max(0, Number(e.target.value)) })}
+                className="w-12 px-2 py-1 bg-white border border-amber-300 rounded font-bold text-center"
+              />
+            </label>
+            <label className="flex items-center gap-1 font-bold">
+              <span>Bobot SAS:</span>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                value={weights.sas}
+                onChange={(e) => saveWeightsToStorage({ ...weights, sas: Math.max(0, Number(e.target.value)) })}
+                className="w-12 px-2 py-1 bg-white border border-amber-300 rounded font-bold text-center"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => saveWeightsToStorage({ tp: 2, sts: 1, sas: 1 })}
+              className="px-2.5 py-1 text-[11px] font-bold bg-amber-200/80 hover:bg-amber-300 text-amber-900 rounded cursor-pointer"
+            >
+              Reset (2:1:1)
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Grid View */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* Left Side Column: Manage Objectives list (TPs) */}
-        <div className="lg:col-span-4 space-y-6 no-print">
-          <div className="bg-white rounded-xl border border-slate-150 p-5 space-y-4 shadow-sm">
+        {(showSidebarSettings || (viewMode !== 'semester_rekap' && viewMode !== 'all_daily_tp')) && (
+          <div className="lg:col-span-4 space-y-6 no-print">
+            <div className="bg-white rounded-xl border border-slate-150 p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-teal-600" />
@@ -796,18 +1440,41 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
             </div>
           </div>
         </div>
+        )}
 
-        {/* Right Side Column: Main Grid Recaps Matrix */}
-        <div className="lg:col-span-8 space-y-4">
+        {/* Right Side Column: Main Grid Recaps Matrix / Table */}
+        <div className={`space-y-4 ${
+          showSidebarSettings || (viewMode !== 'semester_rekap' && viewMode !== 'all_daily_tp') ? 'lg:col-span-8' : 'lg:col-span-12'
+        }`}>
           
           {/* Header Toolbar Actions */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 no-print">
             <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
               <Users className="w-4 h-4 text-teal-600" />
-              MATRIKS EVALUASI TP KELAS
+              {viewMode === 'all_daily_tp' ? 'REKAP NILAI HARIAN SEMUA TP' : viewMode === 'semester_rekap' ? 'REKAP 1 SEMESTER LENGKAP' : viewMode === 'daily_tp' ? `ASESMEN FORMATIF (${currentActiveTp.code})` : 'MATRIKS EVALUASI TP'}
             </span>
 
             <div className="flex items-center gap-2">
+              <ExportJsonPromptAiButtons
+                variant="compact"
+                onExportJson={() => {
+                  const filename = `Rekap_Nilai_TP_${activeClass.name.replace(/\s+/g, '_')}.json`;
+                  downloadJsonFile(filename, {
+                    kelas: activeClass.name,
+                    grade: activeClass.grade,
+                    subject,
+                    semester,
+                    schoolYear,
+                    kktp,
+                    tps,
+                    scores,
+                    dailyScores,
+                    summaryStats
+                  });
+                }}
+                onOpenPromptAi={() => setShowPromptModal(true)}
+              />
+
               <button
                 onClick={handleExportCsv}
                 className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-250 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
@@ -841,10 +1508,18 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
             <div className="text-center border-b-4 border-double border-slate-900 pb-4 mb-4 relative flex flex-col items-center">
               <span className="font-mono text-[9px] uppercase font-black tracking-widest text-slate-500 mb-1">DATA ADMINISTRASI ADMINISTRATOR GURU SD</span>
               <h2 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight">
-                LAPORAN REKAPITULASI NILAI HARIAN PER TP
+                {viewMode === 'all_daily_tp'
+                  ? 'REKAPITULASI NILAI HARIAN SEMUA TUJUAN PEMBELAJARAN (TP)'
+                  : viewMode === 'semester_rekap' 
+                  ? 'LAPORAN REKAPITULASI NILAI HARIAN PER TP 1 SEMESTER LENGKAP' 
+                  : viewMode === 'daily_tp' 
+                  ? `DETAIL ASESMEN FORMATIF HARIAN (${currentActiveTp.code})` 
+                  : 'LAPORAN REKAPITULASI NILAI HARIAN PER TP'}
               </h2>
               <p className="text-xs text-slate-600 mt-1 font-semibold">
                 Mata Pelajaran: {subject} &bull; Semester {semester} &bull; Tahun Pelajaran {schoolYear}
+                {viewMode === 'all_daily_tp' && ' • Format Formatif Praktik (NH1), Teori (NH2), Tugas (NH3) & Sumatif TP'}
+                {viewMode === 'daily_tp' && ` • Lingkup Materi: ${currentActiveTp.text}`}
               </p>
               <div className="w-full flex justify-between items-center text-[11px] font-bold text-slate-700 mt-3 pt-2 border-t border-slate-100/50">
                 <span>Kelas: {activeClass.name}</span>
@@ -852,129 +1527,169 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
               </div>
             </div>
 
-            {/* Interactive Grid Table */}
-            <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-250 font-black uppercase text-[9px] tracking-wider text-center">
-                    <th className="p-3 border-r border-slate-200 w-12">No</th>
-                    <th className="p-3 border-r border-slate-200 text-left min-w-[160px]">Nama Siswa</th>
-                    <th className="p-3 border-r border-slate-200 w-12">L/P</th>
-                    
-                    {/* TP Column Headers */}
-                    {tps.map(tp => (
-                      <th 
-                        key={tp.id} 
-                        className="p-3 border-r border-slate-200 w-20 text-center cursor-help group relative"
-                        title={tp.text}
-                      >
-                        <span className="underline decoration-dotted decoration-teal-500 font-extrabold">{tp.code}</span>
-                        {/* Tooltip on hover */}
-                        <span className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[10px] p-2 rounded shadow-lg max-w-xs z-30 font-medium normal-case">
-                          {tp.text}
-                        </span>
-                      </th>
-                    ))}
+            {/* Dynamic Views: Rekap Semua TP vs Full Semester Recap vs Daily Formatif Breakdown vs Compact Matrix */}
+            {viewMode === 'all_daily_tp' ? (
+              <RekapNilaiHarianSemuaTpTable
+                students={activeClass.students}
+                tps={tps}
+                dailyScores={dailyScores}
+                scores={scores}
+                kktp={kktp}
+                onUpdateDailyScore={handleUpdateDailyScore}
+                onUpdateTpFinalScore={handleUpdateTpFinalScore}
+                onToggleGender={handleToggleGender}
+              />
+            ) : viewMode === 'semester_rekap' ? (
+              <RekapNilaiHarianSemesterTable
+                students={activeClass.students}
+                tps={tps}
+                evaluations={evaluations}
+                tpClassAverages={tpClassAverages}
+                classRerataTpAverage={summaryStats.classRerataTpAverage}
+                classStsAverage={summaryStats.classStsAverage}
+                classSasAverage={summaryStats.classSasAverage}
+                classFinalAverage={summaryStats.classAverage}
+                passedPercent={summaryStats.passedPercent}
+                kktp={kktp}
+                onUpdateTpScore={handleUpdateTpFinalScore}
+                onUpdateSemesterScore={handleUpdateSemesterScore}
+                onToggleGender={handleToggleGender}
+              />
+            ) : viewMode === 'daily_tp' ? (
+              <DetailNilaiHarianTpTable
+                activeTp={currentActiveTp}
+                students={activeClass.students}
+                dailyScores={dailyScores}
+                scores={scores}
+                kktp={kktp}
+                onUpdateDailyScore={handleUpdateDailyScore}
+                onUpdateTpFinalScore={handleUpdateTpFinalScore}
+                onToggleGender={handleToggleGender}
+              />
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 border-b border-slate-250 font-black uppercase text-[9px] tracking-wider text-center">
+                      <th className="p-3 border-r border-slate-200 w-12">No</th>
+                      <th className="p-3 border-r border-slate-200 text-left min-w-[160px]">Nama Siswa</th>
+                      <th className="p-3 border-r border-slate-200 w-12">L/P</th>
+                      
+                      {/* TP Column Headers */}
+                      {tps.map(tp => (
+                        <th 
+                          key={tp.id} 
+                          className="p-3 border-r border-slate-200 w-20 text-center cursor-help group relative"
+                          title={tp.text}
+                        >
+                          <span className="underline decoration-dotted decoration-teal-500 font-extrabold">{tp.code}</span>
+                          {/* Tooltip on hover */}
+                          <span className="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 bg-slate-900 text-white text-[10px] p-2 rounded shadow-lg max-w-xs z-30 font-medium normal-case">
+                            {tp.text}
+                          </span>
+                        </th>
+                      ))}
 
-                    <th className="p-3 border-r border-slate-200 w-24 bg-teal-50/50 text-teal-900 font-extrabold text-center">Rata-rata</th>
-                    <th className="p-3 text-center w-28">Ketuntasan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-150 font-medium text-center">
-                  {activeClass.students.map((student, sIdx) => {
-                    const stats = studentStats[student.id] || { average: 0, isPassed: false };
-                    return (
-                      <tr key={student.id} className="hover:bg-slate-50/50">
-                        <td className="p-3 border-r border-slate-200 text-slate-400 font-mono font-bold">
-                          {sIdx + 1}
-                        </td>
-                        <td className="p-3 border-r border-slate-200 text-left font-extrabold text-slate-800">
-                          {student.name}
-                        </td>
-                        <td className="p-2 border-r border-slate-200 text-center font-bold">
-                          {onUpdateStudents ? (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleGender(student.id)}
-                              className={`px-2 py-0.5 rounded text-xs font-bold transition-all cursor-pointer no-print ${
-                                student.gender === 'L'
-                                  ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                              }`}
-                              title="Klik untuk mengubah jenis kelamin siswa (L <-> P)"
-                            >
-                              {student.gender}
-                            </button>
-                          ) : (
-                            <span className="no-print">{student.gender}</span>
-                          )}
-                          <span className="hidden print:inline font-bold">{student.gender}</span>
-                        </td>
+                      <th className="p-3 border-r border-slate-200 w-24 bg-teal-50/50 text-teal-900 font-extrabold text-center">Rata-rata</th>
+                      <th className="p-3 text-center w-28">Ketuntasan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-150 font-medium text-center">
+                    {activeClass.students.map((student, sIdx) => {
+                      const stats = studentStats[student.id] || { average: 0, isPassed: false };
+                      return (
+                        <tr key={student.id} className="hover:bg-slate-50/50">
+                          <td className="p-3 border-r border-slate-200 text-slate-400 font-mono font-bold">
+                            {sIdx + 1}
+                          </td>
+                          <td className="p-3 border-r border-slate-200 text-left font-extrabold text-slate-800">
+                            {student.name}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-center font-bold">
+                            {onUpdateStudents ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleGender(student.id)}
+                                className={`px-2 py-0.5 rounded text-xs font-bold transition-all cursor-pointer no-print ${
+                                  student.gender === 'L'
+                                    ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                                    : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                                }`}
+                                title="Klik untuk mengubah jenis kelamin siswa (L <-> P)"
+                              >
+                                {student.gender}
+                              </button>
+                            ) : (
+                              <span className="no-print">{student.gender}</span>
+                            )}
+                            <span className="hidden print:inline font-bold">{student.gender}</span>
+                          </td>
 
-                        {/* Interactive dynamic TP scores inputs */}
-                        {tps.map(tp => {
-                          const score = scores[student.id]?.[tp.id] ?? 0;
-                          return (
-                            <td key={tp.id} className="p-2 border-r border-slate-200 text-center">
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={score}
-                                onChange={(e) => handleScoreChange(student.id, tp.id, e.target.value)}
-                                className="w-14 px-1 py-1 text-center font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 bg-slate-50/50 hover:bg-slate-100 rounded border border-transparent hover:border-slate-300 transition-all no-print"
-                              />
-                              <span className="hidden print:inline font-bold">{score}</span>
-                            </td>
-                          );
-                        })}
+                          {/* Interactive dynamic TP scores inputs */}
+                          {tps.map(tp => {
+                            const score = scores[student.id]?.[tp.id] ?? 0;
+                            return (
+                              <td key={tp.id} className="p-2 border-r border-slate-200 text-center">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  value={score}
+                                  onChange={(e) => handleScoreChange(student.id, tp.id, e.target.value)}
+                                  className="w-14 px-1 py-1 text-center font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 bg-slate-50/50 hover:bg-slate-100 rounded border border-transparent hover:border-slate-300 transition-all no-print"
+                                />
+                                <span className="hidden print:inline font-bold">{score}</span>
+                              </td>
+                            );
+                          })}
 
-                        {/* Student Average score */}
-                        <td className="p-3 border-r border-slate-200 font-black text-slate-900 bg-teal-50/30 text-center text-sm">
-                          {stats.average}
-                        </td>
+                          {/* Student Average score */}
+                          <td className="p-3 border-r border-slate-200 font-black text-slate-900 bg-teal-50/30 text-center text-sm">
+                            {stats.average}
+                          </td>
 
-                        {/* Ketuntasan badge indicator */}
-                        <td className="p-3">
-                          {stats.average >= kktp ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                              Tuntas
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200">
-                              <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
-                              Remedial
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          {/* Ketuntasan badge indicator */}
+                          <td className="p-3">
+                            {stats.average >= kktp ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                Tuntas
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-50 text-rose-700 border border-rose-200">
+                                <AlertCircle className="w-3 h-3 text-rose-500 shrink-0" />
+                                Remedial
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
 
-                  {/* Summary Footer Class average indicators */}
-                  <tr className="bg-slate-100/80 text-slate-800 font-extrabold text-[11px] border-t-2 border-slate-300">
-                    <td colSpan={3} className="p-3 border-r border-slate-200 text-right uppercase tracking-wider">
-                      Rata-rata Kelas
-                    </td>
-                    
-                    {tps.map(tp => (
-                      <td key={tp.id} className="p-3 border-r border-slate-200 text-teal-800 font-black">
-                        {tpClassAverages[tp.id]}
+                    {/* Summary Footer Class average indicators */}
+                    <tr className="bg-slate-100/80 text-slate-800 font-extrabold text-[11px] border-t-2 border-slate-300">
+                      <td colSpan={3} className="p-3 border-r border-slate-200 text-right uppercase tracking-wider">
+                        Rata-rata Kelas
                       </td>
-                    ))}
+                      
+                      {tps.map(tp => (
+                        <td key={tp.id} className="p-3 border-r border-slate-200 text-teal-800 font-black">
+                          {tpClassAverages[tp.id]}
+                        </td>
+                      ))}
 
-                    <td className="p-3 border-r border-slate-200 bg-teal-100/50 text-teal-950 font-black text-center text-xs">
-                      {summaryStats.classAverage}
-                    </td>
+                      <td className="p-3 border-r border-slate-200 bg-teal-100/50 text-teal-950 font-black text-center text-xs">
+                        {summaryStats.classAverage}
+                      </td>
 
-                    <td className="p-3 text-emerald-700 font-black text-center">
-                      {summaryStats.passedPercent}% Tuntas
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                      <td className="p-3 text-emerald-700 font-black text-center">
+                        {summaryStats.passedPercent}% Tuntas
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Standard Signature Blocks for official report (visible on print or export) */}
             <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs text-slate-800 font-medium border-t border-slate-100">
@@ -1007,6 +1722,27 @@ export default function RekapNilaiTpView({ classes, selectedClassId, setSelected
 
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Rekapitulasi Nilai & Ketercapaian TP"
+        subtitle={`Kelas ${activeClass.name} - Nilai Rata-rata ${summaryStats.classAverage}`}
+        tabs={getUlanganHarianPrompts(tps.map(t => t.text).join(', '))}
+        defaultActiveTab="kisi_ulangan"
+        jsonData={{
+          kelas: activeClass.name,
+          grade: activeClass.grade,
+          subject,
+          semester,
+          schoolYear,
+          kktp,
+          tps,
+          scores,
+          summaryStats
+        }}
+        jsonFilename={`Rekap_Nilai_TP_${activeClass.name.replace(/\s+/g, '_')}.json`}
+      />
     </div>
   );
 }

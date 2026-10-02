@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Key } from 'lucide-react';
+import { downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKodeEtikKkoCetakPrompts } from '../utils/aiPromptGenerators';
 
 export default function AccountSettingsView() {
+  const [showPromptModal, setShowPromptModal] = useState(false);
   const [currentUsername, setCurrentUsername] = useState(() => {
     return localStorage.getItem('sadar_pjok_admin_username') || 'admin';
   });
@@ -62,15 +67,29 @@ export default function AccountSettingsView() {
         <div className="absolute top-0 right-0 p-8 opacity-10">
           <Key className="w-48 h-48" />
         </div>
-        <div className="relative z-10 space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest border border-emerald-500/30">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Keamanan Akun
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest border border-emerald-500/30">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Keamanan Akun
+            </div>
+            <h2 className="text-3xl font-black tracking-tight">Pengaturan Kredensial</h2>
+            <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
+              Kelola username dan password administrasi SADAR PJOK Anda untuk melindungi data rekap, jurnal, dan RPP Anda dari akses yang tidak diinginkan.
+            </p>
           </div>
-          <h2 className="text-3xl font-black tracking-tight">Pengaturan Kredensial</h2>
-          <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
-            Kelola username dan password administrasi SADAR PJOK Anda untuk melindungi data rekap, jurnal, dan RPP Anda dari akses yang tidak diinginkan.
-          </p>
+          <div className="shrink-0 bg-white/10 backdrop-blur-xs p-2 rounded-2xl border border-white/20">
+            <ExportJsonPromptAiButtons
+              onExportJson={() => {
+                const filename = `Akun_Administrasi_SADAR_PJOK_${currentUsername}.json`;
+                downloadJsonFile(filename, {
+                  username: currentUsername,
+                  lastUpdated: new Date().toISOString()
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
+          </div>
         </div>
       </div>
 
@@ -218,6 +237,20 @@ export default function AccountSettingsView() {
         </form>
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Keamanan Data & Akun Guru"
+        subtitle="Panduan Perlindungan Data Administrasi dan Privasi Siswa"
+        tabs={getKodeEtikKkoCetakPrompts("Keamanan Data Siswa dan Akun Guru Digital")}
+        defaultActiveTab="prompt_menu"
+        jsonData={{
+          username: currentUsername,
+          lastUpdated: new Date().toISOString()
+        }}
+        jsonFilename={`Akun_Administrasi_SADAR_PJOK_${currentUsername}.json`}
+      />
     </div>
   );
 }

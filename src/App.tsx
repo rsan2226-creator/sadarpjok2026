@@ -499,6 +499,7 @@ export default function App() {
               onUpdateStudents={handleUpdateStudents}
               onAddClass={handleAddClass}
               onDeleteClass={handleDeleteClass}
+              defaultSubTab="absensi_mingguan_pjok"
             />
           )}
 
@@ -510,6 +511,7 @@ export default function App() {
               onUpdateStudents={handleUpdateStudents}
               onAddClass={handleAddClass}
               onDeleteClass={handleDeleteClass}
+              defaultSubTab="penilaian"
             />
           )}
 

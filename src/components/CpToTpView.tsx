@@ -25,8 +25,11 @@ import {
   HelpCircle,
   FileCheck
 } from 'lucide-react';
-import { exportCpToTpToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportCpToTpToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import { fetchWithRetry } from '../lib/fetchUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getCpToTpPrompts } from '../utils/aiPromptGenerators';
 
 export default function CpToTpView() {
   const [selectedFaseId, setSelectedFaseId] = useState<string>('fase-a');
@@ -47,6 +50,7 @@ export default function CpToTpView() {
 
   // Copy states
   const [copied, setCopied] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const activeFase = PREBUILT_CP_DATA.find(f => f.id === selectedFaseId) || PREBUILT_CP_DATA[0];
   const activeElement = activeFase.elements.find(e => e.id === activeElementId) || activeFase.elements[0];
@@ -208,21 +212,40 @@ export default function CpToTpView() {
     <div className="space-y-8 animate-fadeIn pb-12">
       
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 via-teal-700 to-emerald-900 rounded-2xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-700 to-emerald-900 rounded-2xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="absolute -right-6 -bottom-8 opacity-10 pointer-events-none">
           <Target className="w-64 h-64 text-white" />
         </div>
-        <div className="relative z-10 max-w-3xl space-y-3">
+        <div className="relative z-10 max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 bg-emerald-500/30 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-emerald-200 border border-emerald-400/30">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             <span>Fitur Baru: Kurikulum Merdeka PJOK SD</span>
           </div>
           <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            Formulasi & Analisis Penurunan CP ke TP
+            Formulasi &amp; Analisis Penurunan CP ke TP
           </h2>
           <p className="text-slate-200 text-sm md:text-base leading-relaxed">
-            Alat bantu kecerdasan buatan untuk membedah <span className="font-semibold text-emerald-200">Capaian Pembelajaran (CP)</span> menjadi <span className="font-semibold text-emerald-200">Tujuan Pembelajaran (TP)</span> terukur, sistematis, dan langsung siap dipetakan ke ATP & Modul Ajar.
+            Alat bantu kecerdasan buatan untuk membedah <span className="font-semibold text-emerald-200">Capaian Pembelajaran (CP)</span> menjadi <span className="font-semibold text-emerald-200">Tujuan Pembelajaran (TP)</span> terukur, sistematis, dan langsung siap dipetakan ke ATP &amp; Modul Ajar.
           </p>
+        </div>
+
+        <div className="relative z-10 shrink-0">
+          <ExportJsonPromptAiButtons
+            onExportJson={() => {
+              downloadJsonFile(`CP_ke_TP_${activeFase.id}_Kelas_${targetKelas}`, {
+                judul: 'Formulasi CP ke Tujuan Pembelajaran (TP) PJOK',
+                tanggalEkspor: new Date().toISOString(),
+                fase: activeFase.phaseName,
+                kelas: targetKelas,
+                elemen: activeElement.name,
+                teksCp: customCpText || activeElement.description,
+                materiSpesifik,
+                pendekatanFormat,
+                hasilFormulasiTp: resultData
+              });
+            }}
+            onOpenPromptAi={() => setShowPromptModal(true)}
+          />
         </div>
       </div>
 
@@ -760,6 +783,30 @@ export default function CpToTpView() {
 
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Formulasi CP ke TP PJOK"
+        subtitle={`Fase ${activeFase.phaseName} • Kelas ${targetKelas} SD • Elemen ${activeElement.name}`}
+        tabs={getCpToTpPrompts({
+          fase: activeFase.phaseName,
+          kelas: targetKelas,
+          elemen: activeElement.name,
+          cpText: customCpText || activeElement.description,
+          tpList: resultData?.tujuanPembelajaran || []
+        })}
+        jsonData={{
+          fase: activeFase.phaseName,
+          kelas: targetKelas,
+          elemen: activeElement.name,
+          cpText: customCpText || activeElement.description,
+          materiSpesifik,
+          hasilFormulasi: resultData,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`Formulasi_CP_TP_Kelas_${targetKelas}`}
+      />
     </div>
   );
 }

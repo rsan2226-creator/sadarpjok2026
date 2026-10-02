@@ -24,6 +24,10 @@ import {
   saveClientSupabaseCredentials, 
   clearClientSupabaseCredentials 
 } from '../lib/dbClient';
+import { downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKodeEtikKkoCetakPrompts } from '../utils/aiPromptGenerators';
 
 interface SupabaseStatus {
   configured: boolean;
@@ -52,6 +56,7 @@ export default function SupabaseIntegrationView({ supabaseStatus, refetchStatus 
   const [showKey, setShowKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Sync state with local storage credentials on mount or status refresh
   useEffect(() => {
@@ -114,16 +119,32 @@ export default function SupabaseIntegrationView({ supabaseStatus, refetchStatus 
         <div className="absolute top-0 right-0 p-8 opacity-10">
           <Database className="w-48 h-48" />
         </div>
-        <div className="relative z-10 space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest border border-emerald-500/30">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Keamanan Data Awan (Cloud Sync)
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest border border-emerald-500/30">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Keamanan Data Awan (Cloud Sync)
+            </div>
+            <h2 className="text-3xl font-black tracking-tight">Integrasi Supabase Cloud</h2>
+            <p className="text-slate-300 max-w-2xl leading-relaxed">
+              Hubungkan administrasi <strong>SADAR PJOK</strong> Anda dengan database Supabase Cloud agar data 
+              Anda tersimpan secara permanen, aman, dan dapat diakses dari perangkat mana pun secara real-time.
+            </p>
           </div>
-          <h2 className="text-3xl font-black tracking-tight">Integrasi Supabase Cloud</h2>
-          <p className="text-slate-300 max-w-2xl leading-relaxed">
-            Hubungkan administrasi <strong>SADAR PJOK</strong> Anda dengan database Supabase Cloud agar data 
-            Anda tersimpan secara permanen, aman, dan dapat diakses dari perangkat mana pun secara real-time.
-          </p>
+          <div className="shrink-0 bg-white/10 backdrop-blur-xs p-2 rounded-2xl border border-white/20">
+            <ExportJsonPromptAiButtons
+              onExportJson={() => {
+                const filename = `Supabase_Config_SADAR_PJOK.json`;
+                downloadJsonFile(filename, {
+                  status: supabaseStatus,
+                  configured: supabaseStatus?.configured,
+                  tables: supabaseStatus?.tables,
+                  sqlSchemaScript: supabaseStatus?.sqlScript
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
+          </div>
         </div>
       </div>
 
@@ -467,6 +488,23 @@ export default function SupabaseIntegrationView({ supabaseStatus, refetchStatus 
           
         </div>
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Database & Cloud Sync Supabase"
+        subtitle="Panduan Sinkronisasi Database dan Keamanan PostgreSQL"
+        tabs={getKodeEtikKkoCetakPrompts("Integrasi Database Supabase dan Cloud Storage")}
+        defaultActiveTab="prompt_menu"
+        jsonData={{
+          status: supabaseStatus,
+          configured: supabaseStatus?.configured,
+          tables: supabaseStatus?.tables,
+          sqlSchemaScript: supabaseStatus?.sqlScript
+        }}
+        jsonFilename="Supabase_Config_SADAR_PJOK.json"
+      />
     </div>
   );
 }

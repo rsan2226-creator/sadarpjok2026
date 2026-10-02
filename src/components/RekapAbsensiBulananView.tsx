@@ -17,7 +17,10 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { exportRekapBulananToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportRekapBulananToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getAbsensiPenilaianPrompts } from '../utils/aiPromptGenerators';
 
 interface RekapAbsensiBulananViewProps {
   activeClass: ClassData;
@@ -60,6 +63,7 @@ export default function RekapAbsensiBulananView({
   const [showSettings, setShowSettings] = useState(false);
   const [isExportedDoc, setIsExportedDoc] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const daysInMonth = useMemo(() => {
     return new Date(selectedYear, selectedMonth, 0).getDate();
@@ -360,6 +364,23 @@ export default function RekapAbsensiBulananView({
 
           {/* Export & Print Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
+            <ExportJsonPromptAiButtons
+              variant="compact"
+              onExportJson={() => {
+                const filename = `Rekap_Absensi_Bulanan_${activeClass.name.replace(/\s+/g, '_')}_${namaBulan}_${selectedYear}.json`;
+                downloadJsonFile(filename, {
+                  kelas: activeClass.name,
+                  bulan: namaBulan,
+                  tahun: selectedYear,
+                  sekolah: namaSekolah,
+                  guru: namaGuru,
+                  nipGuru,
+                  siswa: activeClass.students
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
+
             <button
               type="button"
               onClick={handleExportDoc}
@@ -924,6 +945,26 @@ export default function RekapAbsensiBulananView({
         </div>
 
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Rekap Absensi Bulanan PJOK"
+        subtitle={`${activeClass.name} - Periode ${namaBulan} ${selectedYear}`}
+        tabs={getAbsensiPenilaianPrompts(activeClass.name, activeClass.students.length)}
+        defaultActiveTab="analisis_kehadiran"
+        jsonData={{
+          kelas: activeClass.name,
+          bulan: namaBulan,
+          tahun: selectedYear,
+          sekolah: namaSekolah,
+          guru: namaGuru,
+          nipGuru,
+          siswa: activeClass.students
+        }}
+        jsonFilename={`Rekap_Absensi_Bulanan_${activeClass.name.replace(/\s+/g, '_')}_${namaBulan}_${selectedYear}.json`}
+      />
     </div>
   );
 }

@@ -17,8 +17,11 @@ import {
   AlertCircle,
   Copy
 } from 'lucide-react';
-import { exportModulToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportModulToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getModulAjarPrompts } from '../utils/aiPromptGenerators';
 
 interface ModulAjarViewProps {
   moduls: ModulAjar[];
@@ -34,6 +37,7 @@ export default function ModulAjarView({ moduls, onAddModul, onDeleteModul }: Mod
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // AI Form state
   const [aiMateri, setAiMateri] = useState('');
@@ -494,6 +498,14 @@ export default function ModulAjarView({ moduls, onAddModul, onDeleteModul }: Mod
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <ExportJsonPromptAiButtons
+                  variant="compact"
+                  onExportJson={() => {
+                    const filename = `Modul_Ajar_${(activeModul.materiPokok || 'PJOK').replace(/\s+/g, '_')}_Kelas_${activeModul.grade}.json`;
+                    downloadJsonFile(filename, activeModul);
+                  }}
+                  onOpenPromptAi={() => setShowPromptModal(true)}
+                />
                 <button
                   disabled={isExportingPdf}
                   onClick={async () => {
@@ -678,6 +690,18 @@ export default function ModulAjarView({ moduls, onAddModul, onDeleteModul }: Mod
           </div>
         )}
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Modul Ajar PJOK Kurikulum Merdeka"
+        subtitle={activeModul ? `${activeModul.materiPokok} (Kelas ${activeModul.grade})` : 'Penyusunan RPP & Modul Ajar PJOK Berdiferensiasi'}
+        tabs={getModulAjarPrompts(activeModul)}
+        defaultActiveTab="diferensiasi_modul"
+        jsonData={activeModul || moduls}
+        jsonFilename={activeModul ? `Modul_Ajar_${activeModul.materiPokok.replace(/\s+/g, '_')}_Kelas_${activeModul.grade}.json` : 'Daftar_Modul_Ajar_PJOK.json'}
+      />
     </div>
   );
 }

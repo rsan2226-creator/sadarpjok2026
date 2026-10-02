@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { Sparkles, FileText, ClipboardCopy, FileDown, BookOpen, User, Users, CheckCircle2, AlertCircle, RefreshCw, Printer, ExternalLink, Copy, Layers, Calendar, Clock, GraduationCap, School } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DeepLearningRPM } from '../types';
-import { exportRpmToDoc, downloadDocFile, copyAndOpenGoogleDocs, copyRichHtmlToClipboard } from '../lib/exportUtils';
+import { exportRpmToDoc, downloadDocFile, copyAndOpenGoogleDocs, copyRichHtmlToClipboard, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
 import { RPMTableSection, RPMLampiranSection, RPMLkpdSection } from './DeepLearningDocumentPreview';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getDeepLearningPrompts } from '../utils/aiPromptGenerators';
 
 // Konfigurasi Jenjang, Kelas, dan Fase Kurikulum Merdeka
 type JenjangType = 'SD' | 'SMP' | 'SMA' | 'PAUD';
@@ -95,6 +98,7 @@ export function DeepLearningRPMView() {
   const [copiedStatus, setCopiedStatus] = useState(false);
   const [copiedTextStatus, setCopiedTextStatus] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Validation
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -271,14 +275,32 @@ export function DeepLearningRPMView() {
   return (
     <div className="space-y-6">
       {/* Header section (Hidden on print) */}
-      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm no-print">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-indigo-500 animate-pulse" />
-          Pembelajaran Mendalam (Deep Learning) - RPM & LKPD
-        </h1>
-        <p className="text-slate-500 mt-1 text-sm max-w-3xl">
-          Rancang Rencana Pembelajaran Mendalam (RPM) bersintaks terstruktur dan Lembar Kerja Peserta Didik (LKPD) mandiri bermakna (mindful, meaningful, joyful) dengan penyesuaian Kelas, Fase Kurikulum Merdeka, dan Jumlah Pertemuan secara instan.
-        </p>
+      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm no-print flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-indigo-500 animate-pulse" />
+            Pembelajaran Mendalam (Deep Learning) - RPM & LKPD
+          </h1>
+          <p className="text-slate-500 mt-1 text-sm max-w-3xl">
+            Rancang Rencana Pembelajaran Mendalam (RPM) bersintaks terstruktur dan Lembar Kerja Peserta Didik (LKPD) mandiri bermakna (mindful, meaningful, joyful) dengan penyesuaian Kelas, Fase Kurikulum Merdeka, dan Jumlah Pertemuan secara instan.
+          </p>
+        </div>
+        <ExportJsonPromptAiButtons
+          onExportJson={() => {
+            const dataToExport = rpmResult || {
+              materi: materi || 'Materi Belum Diisi',
+              jenjang,
+              kelas: grade,
+              fase,
+              jumlahPertemuan,
+              penyusun,
+              sekolah
+            };
+            const filename = `RPM_Deep_Learning_${(dataToExport.materi || 'PJOK').replace(/\s+/g, '_')}_Kelas_${grade}.json`;
+            downloadJsonFile(filename, dataToExport);
+          }}
+          onOpenPromptAi={() => setShowPromptModal(true)}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -780,6 +802,15 @@ export function DeepLearningRPMView() {
 
                   {/* Export Buttons */}
                   <div className="flex flex-wrap items-center gap-2">
+                    <ExportJsonPromptAiButtons
+                      variant="compact"
+                      onExportJson={() => {
+                        const filename = `RPM_${rpmResult.identitas.mataPelajaran || 'PJOK'}_Kelas_${rpmResult.identitas.kelasFase || grade}_${(rpmResult.identitas.topik || 'Topik').replace(/\s+/g, '_')}.json`;
+                        downloadJsonFile(filename, rpmResult);
+                      }}
+                      onOpenPromptAi={() => setShowPromptModal(true)}
+                    />
+
                     <button
                       type="button"
                       onClick={handleCopyToClipboardAndOpenDocs}
@@ -917,6 +948,27 @@ export function DeepLearningRPMView() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Rencana Pembelajaran Mendalam (RPM)"
+        subtitle={`${materi || 'Deep Learning PJOK'} - Kelas ${grade} (${fase})`}
+        tabs={getDeepLearningPrompts(materi || rpmResult?.identitas?.topik || 'Aktivitas Kebugaran Jasmani')}
+        defaultActiveTab="sintaks_deep_learning"
+        jsonData={rpmResult || {
+          topik: materi,
+          jenjang,
+          kelas: grade,
+          fase,
+          jumlahPertemuan,
+          alokasiWaktu,
+          penyusun,
+          sekolah
+        }}
+        jsonFilename={`RPM_Deep_Learning_${(materi || 'PJOK').replace(/\s+/g, '_')}_Kelas_${grade}.json`}
+      />
     </div>
   );
 }

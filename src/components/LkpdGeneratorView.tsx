@@ -30,8 +30,11 @@ import {
   Activity
 } from 'lucide-react';
 import { InteractiveLkpdData } from '../types';
-import { downloadDocFile, copyAndOpenGoogleDocs, exportLkpdToDoc } from '../lib/exportUtils';
+import { downloadDocFile, copyAndOpenGoogleDocs, exportLkpdToDoc, downloadJsonFile } from '../lib/exportUtils';
 import { downloadElementAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getLkpdPrompts } from '../utils/aiPromptGenerators';
 import { 
   PJOK_SD_PRESETS, 
   DEFAULT_PJOK_KALIMANTONG_LKPD, 
@@ -53,6 +56,7 @@ export default function LkpdGeneratorView() {
   const [sekolah, setSekolah] = useState('SD Negeri Kalimantong');
   const [alokasiWaktu, setAlokasiWaktu] = useState('2 JP (2 x 35 Menit)');
   const [gayaDesain, setGayaDesain] = useState('Edukatif Profesional (Navy & Emerald)');
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Mode V1 Specific States
   const [fase, setFase] = useState('B');
@@ -1029,7 +1033,30 @@ Refleksi Diri:
                   </p>
                 </div>
                 
-                <div className="flex flex-wrap gap-2.5">
+                <div className="flex flex-wrap gap-2.5 items-center">
+                  <ExportJsonPromptAiButtons
+                    variant="compact"
+                    onExportJson={() => {
+                      downloadJsonFile(`LKPD_${topikMateri.replace(/\s+/g, '_')}_Kelas_${kelas}`, {
+                        activeInputTab,
+                        selectedInfoStyle,
+                        mataPelajaran,
+                        kelas,
+                        topikMateri,
+                        guruPenyusun,
+                        sekolah,
+                        alokasiWaktu,
+                        gayaDesain,
+                        fase,
+                        sintaks,
+                        tujuanPembelajaran,
+                        hasilLkpd: lkpdResult,
+                        tanggalEkspor: new Date().toISOString()
+                      });
+                    }}
+                    onOpenPromptAi={() => setShowPromptModal(true)}
+                  />
+
                   <button
                     onClick={handleDownloadPdf}
                     disabled={isExportingPdf}

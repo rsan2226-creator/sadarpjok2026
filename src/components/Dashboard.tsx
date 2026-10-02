@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ClassData, JurnalMengajar, ModulAjar } from '../types';
 import { 
   Users, 
@@ -12,6 +12,10 @@ import {
   ArrowUpRight,
   TrendingDown
 } from 'lucide-react';
+import { downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKodeEtikKkoCetakPrompts } from '../utils/aiPromptGenerators';
 
 interface DashboardProps {
   classes: ClassData[];
@@ -28,6 +32,7 @@ export default function Dashboard({
   onTabChange, 
   setSelectedClassId 
 }: DashboardProps) {
+  const [showPromptModal, setShowPromptModal] = useState(false);
   
   // Calculations
   const totalClasses = classes.length;
@@ -114,6 +119,29 @@ export default function Dashboard({
             >
               Analisis Jam Mengajar
             </button>
+            <div className="bg-white/10 backdrop-blur-xs p-1 rounded-xl border border-white/20">
+              <ExportJsonPromptAiButtons
+                variant="compact"
+                onExportJson={() => {
+                  const filename = `Dashboard_SADAR_PJOK_${new Date().toISOString().split('T')[0]}.json`;
+                  downloadJsonFile(filename, {
+                    statistikUtama: {
+                      totalSiswa: totalStudents,
+                      totalKelas: totalClasses,
+                      totalModul: totalModuls,
+                      totalJurnal: totalJournals,
+                      rataRataKognitif: avgCognitive,
+                      rataRataPsikomotorik: avgPsychomotor,
+                      rataRataAfektif: avgAffective,
+                      skorKebugaranTotal: overallFitnessScore
+                    },
+                    kelas: classes,
+                    jurnalTerbaru: journals.slice(0, 5)
+                  });
+                }}
+                onOpenPromptAi={() => setShowPromptModal(true)}
+              />
+            </div>
           </div>
         </div>
         {/* Background Decorative Abstract Shapes */}
@@ -360,6 +388,31 @@ export default function Dashboard({
           </div>
         )}
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Konsultan & Perencana SADAR PJOK"
+        subtitle="Analisis Komprehensif Administrasi & Kebugaran Jasmani Siswa"
+        tabs={getKodeEtikKkoCetakPrompts("Dashboard dan Manajemen Administrasi Pembelajaran PJOK")}
+        defaultActiveTab="prompt_menu"
+        jsonData={{
+          statistikUtama: {
+            totalSiswa: totalStudents,
+            totalKelas: totalClasses,
+            totalModul: totalModuls,
+            totalJurnal: totalJournals,
+            rataRataKognitif: avgCognitive,
+            rataRataPsikomotorik: avgPsychomotor,
+            rataRataAfektif: avgAffective,
+            skorKebugaranTotal: overallFitnessScore
+          },
+          kelas: classes,
+          jurnalTerbaru: journals.slice(0, 5)
+        }}
+        jsonFilename={`Dashboard_SADAR_PJOK_${new Date().toISOString().split('T')[0]}.json`}
+      />
     </div>
   );
 }

@@ -20,8 +20,11 @@ import {
   FileText,
   Lightbulb
 } from 'lucide-react';
-import { exportSoalToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportSoalToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getUlanganHarianPrompts } from '../utils/aiPromptGenerators';
 
 export interface Question {
   question: string;
@@ -75,6 +78,7 @@ export default function SoalEvaluasiView() {
   const [isCopied, setIsCopied] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [includeAnswersInExport, setIncludeAnswersInExport] = useState(true);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Edit Modal State
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
@@ -507,6 +511,20 @@ ${includeAnswersInExport ? `Kunci Jawaban: ${q.correctAnswer}\nPembahasan: ${q.e
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2">
+                <ExportJsonPromptAiButtons
+                  variant="compact"
+                  onExportJson={() => {
+                    const filename = `Soal_Evaluasi_PJOK_Kelas_${grade}_${materi.replace(/\s+/g, '_')}.json`;
+                    downloadJsonFile(filename, {
+                      kelas: grade,
+                      materi,
+                      totalSoal: questions.length,
+                      questions
+                    });
+                  }}
+                  onOpenPromptAi={() => setShowPromptModal(true)}
+                />
+
                 <button
                   type="button"
                   onClick={() => setIncludeAnswersInExport(!includeAnswersInExport)}
@@ -942,6 +960,23 @@ ${includeAnswersInExport ? `Kunci Jawaban: ${q.correctAnswer}\nPembahasan: ${q.e
           </form>
         </div>
       )}
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Bank Soal Evaluasi PJOK SD"
+        subtitle={`Kelas ${grade} SD - ${materi}`}
+        tabs={getUlanganHarianPrompts(materi)}
+        defaultActiveTab="kisi_ulangan"
+        jsonData={{
+          kelas: grade,
+          materi,
+          totalSoal: questions.length,
+          questions
+        }}
+        jsonFilename={`Soal_Evaluasi_PJOK_Kelas_${grade}_${materi.replace(/\s+/g, '_')}.json`}
+      />
     </div>
   );
 }

@@ -15,8 +15,11 @@ import {
   Copy,
   Download
 } from 'lucide-react';
-import { exportRubrikToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportRubrikToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getRubrikFisikPrompts } from '../utils/aiPromptGenerators';
 
 interface RubrikFisikViewProps {
   rubriks: RubrikFisik[];
@@ -32,6 +35,7 @@ export default function RubrikFisikView({ rubriks, onAddRubrik, onDeleteRubrik }
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Form State
   const [materiInput, setMateriInput] = useState('');
@@ -254,6 +258,14 @@ export default function RubrikFisikView({ rubriks, onAddRubrik, onDeleteRubrik }
                 <p className="text-xs text-slate-400 mt-1">Gunakan rubrik kriteria ini untuk mengevaluasi gerak fisik secara presisi dan objektif.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2 shrink-0 no-print">
+                <ExportJsonPromptAiButtons
+                  variant="compact"
+                  onExportJson={() => {
+                    const filename = `Rubrik_Penilaian_${(activeRubrik.materi || 'Fisik').replace(/\s+/g, '_')}.json`;
+                    downloadJsonFile(filename, activeRubrik);
+                  }}
+                  onOpenPromptAi={() => setShowPromptModal(true)}
+                />
                 <button
                   disabled={isExportingPdf}
                   onClick={async () => {
@@ -361,6 +373,18 @@ export default function RubrikFisikView({ rubriks, onAddRubrik, onDeleteRubrik }
           </div>
         )}
       </div>
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Rubrik Penilaian Kinerja Praktik PJOK"
+        subtitle={activeRubrik ? `${activeRubrik.materi} (${activeRubrik.kategori})` : 'Kriteria Penilaian Gerak Otentik'}
+        tabs={getRubrikFisikPrompts(activeRubrik?.materi)}
+        defaultActiveTab="rubrik_gerak"
+        jsonData={activeRubrik || rubriks}
+        jsonFilename={`Rubrik_Penilaian_${(activeRubrik?.materi || 'PJOK').replace(/\s+/g, '_')}.json`}
+      />
     </div>
   );
 }

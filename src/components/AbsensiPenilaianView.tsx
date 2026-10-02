@@ -31,8 +31,12 @@ import {
   ArrowLeftRight,
   Wand2
 } from 'lucide-react';
-import { exportAbsensiToDoc, exportPenilaianToDoc, downloadDocFile } from '../lib/exportUtils';
+import { exportAbsensiToDoc, exportPenilaianToDoc, downloadDocFile, downloadJsonFile } from '../lib/exportUtils';
 import RekapAbsensiBulananView from './RekapAbsensiBulananView';
+import AbsensiMingguanPjokView from './AbsensiMingguanPjokView';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getAbsensiPenilaianPrompts } from '../utils/aiPromptGenerators';
 
 // Helper function to detect or infer gender accurately (L/P)
 export function inferGender(rawGenderStr?: string, name?: string): 'L' | 'P' {
@@ -94,7 +98,7 @@ interface AbsensiPenilaianViewProps {
   onUpdateStudents: (classId: string, students: Student[]) => void;
   onAddClass?: (newClass: ClassData) => void;
   onDeleteClass?: (classId: string) => void;
-  defaultSubTab?: 'absensi' | 'absensi_bulanan' | 'penilaian';
+  defaultSubTab?: 'absensi_mingguan_pjok' | 'absensi_bulanan' | 'absensi' | 'penilaian';
 }
 
 export default function AbsensiPenilaianView({ 
@@ -107,10 +111,11 @@ export default function AbsensiPenilaianView({
   defaultSubTab
 }: AbsensiPenilaianViewProps) {
   
-  const [activeSubTab, setActiveSubTab] = useState<'absensi' | 'absensi_bulanan' | 'penilaian'>(defaultSubTab || 'absensi_bulanan');
+  const [activeSubTab, setActiveSubTab] = useState<'absensi_mingguan_pjok' | 'absensi_bulanan' | 'absensi' | 'penilaian'>(defaultSubTab || 'absensi_mingguan_pjok');
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // New Class form states
   const [isAddingClass, setIsAddingClass] = useState(false);
@@ -567,6 +572,15 @@ export default function AbsensiPenilaianView({
 
           {/* Dropdown Selector & Class Actions */}
           <div className="flex flex-wrap items-center gap-2">
+            <ExportJsonPromptAiButtons
+              variant="compact"
+              onExportJson={() => {
+                const filename = `Data_Absensi_Penilaian_${(activeClass?.name || 'Rombel').replace(/\s+/g, '_')}.json`;
+                downloadJsonFile(filename, activeClass || { classes });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
+
             <span className="text-xs font-semibold text-slate-500">Pilih Kelas:</span>
             <select
               value={selectedClassId}
@@ -1080,23 +1094,37 @@ export default function AbsensiPenilaianView({
         )}
       </div>
 
-      {/* Tab bar for Absensi vs Rekap Bulanan vs Penilaian */}
-      <div className="flex border-b border-slate-100">
+      {/* Tab bar for Absensi Mingguan PJOK vs Rekap Bulanan vs Presensi Harian vs Penilaian */}
+      <div className="flex border-b border-slate-200 overflow-x-auto no-print">
+        <button
+          onClick={() => setActiveSubTab('absensi_mingguan_pjok')}
+          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+            activeSubTab === 'absensi_mingguan_pjok'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Activity className="w-4 h-4 text-emerald-600" /> 
+          <span>Presensi Mingguan & Rekap Semester PJOK</span>
+          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-black uppercase">
+            Khusus Guru PJOK
+          </span>
+        </button>
         <button
           onClick={() => setActiveSubTab('absensi_bulanan')}
-          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSubTab === 'absensi_bulanan'
-              ? 'border-emerald-600 text-emerald-700'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40'
               : 'border-transparent text-slate-400 hover:text-slate-600'
           }`}
         >
-          <FileSpreadsheet className="w-4 h-4" /> Rekap Absensi Bulanan (Word .Doc & Siap Cetak)
+          <FileSpreadsheet className="w-4 h-4" /> Rekap Absensi Bulanan (Matrix 31 Hari)
         </button>
         <button
           onClick={() => setActiveSubTab('absensi')}
-          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSubTab === 'absensi'
-              ? 'border-emerald-600 text-emerald-700'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40'
               : 'border-transparent text-slate-400 hover:text-slate-600'
           }`}
         >
@@ -1104,15 +1132,23 @@ export default function AbsensiPenilaianView({
         </button>
         <button
           onClick={() => setActiveSubTab('penilaian')}
-          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+          className={`px-5 py-2.5 font-bold text-xs flex items-center gap-2 border-b-2 transition-all cursor-pointer whitespace-nowrap ${
             activeSubTab === 'penilaian'
-              ? 'border-emerald-600 text-emerald-700'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/40'
               : 'border-transparent text-slate-400 hover:text-slate-600'
           }`}
         >
           <Award className="w-4 h-4" /> Portofolio Penilaian PJOK
         </button>
       </div>
+
+      {/* SUB-TAB: PRESENSI MINGGUAN KHUSUS GURU PJOK */}
+      {activeSubTab === 'absensi_mingguan_pjok' && activeClass && (
+        <AbsensiMingguanPjokView
+          activeClass={activeClass}
+          onUpdateStudents={onUpdateStudents}
+        />
+      )}
 
       {/* SUB-TAB: REKAP BULANAN */}
       {activeSubTab === 'absensi_bulanan' && activeClass && (
@@ -1590,6 +1626,18 @@ export default function AbsensiPenilaianView({
           </div>
         </div>
       )}
+
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Presensi & Penilaian Asesmen Otentik PJOK"
+        subtitle={activeClass ? `${activeClass.name} (${activeClass.students.length} Siswa Terdaftar)` : 'Analisis Kehadiran & Rekap Penilaian'}
+        tabs={getAbsensiPenilaianPrompts(activeClass?.name, activeClass?.students.length)}
+        defaultActiveTab="analisis_kehadiran"
+        jsonData={activeClass || { classes }}
+        jsonFilename={`Absensi_Penilaian_${(activeClass?.name || 'PJOK').replace(/\s+/g, '_')}.json`}
+      />
     </div>
   );
 }

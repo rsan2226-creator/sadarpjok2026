@@ -17,8 +17,11 @@ import {
   FileText
 } from 'lucide-react';
 import { KktpData } from '../types';
-import { downloadDocFile, copyAndOpenGoogleDocs, exportKktpToDoc } from '../lib/exportUtils';
+import { downloadDocFile, copyAndOpenGoogleDocs, exportKktpToDoc, downloadJsonFile } from '../lib/exportUtils';
 import { downloadHtmlAsPdf, printHtmlDocument } from '../lib/pdfUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKktpPrompts } from '../utils/aiPromptGenerators';
 
 export default function KktpGeneratorView() {
   // Input states
@@ -44,6 +47,7 @@ export default function KktpGeneratorView() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Auto-set Fase based on Kelas
   const handleKelasChange = (val: string) => {
@@ -457,6 +461,27 @@ export default function KktpGeneratorView() {
                   )}
                 </button>
 
+                <ExportJsonPromptAiButtons
+                  variant="compact"
+                  onExportJson={() => {
+                    downloadJsonFile(`KKTP_PJOK_Kelas_${kelas}_${materiPokok.replace(/\s+/g, '_')}`, {
+                      satuanPendidikan,
+                      mataPelajaran,
+                      kelas,
+                      fase,
+                      semester,
+                      tahunPelajaran,
+                      bab,
+                      materiPokok,
+                      deskripsiCp,
+                      tujuanPembelajaranRaw,
+                      hasilKktp: kktpResult,
+                      tanggalEkspor: new Date().toISOString()
+                    });
+                  }}
+                  onOpenPromptAi={() => setShowPromptModal(true)}
+                />
+
                 <button
                   onClick={handleDownloadPdf}
                   disabled={isExportingPdf}
@@ -605,6 +630,33 @@ export default function KktpGeneratorView() {
         )}
       </div>
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - KKTP PJOK SD"
+        subtitle={`${materiPokok} • Kelas ${kelas} (Fase ${fase})`}
+        tabs={getKktpPrompts({
+          tp: tujuanPembelajaranRaw,
+          materi: materiPokok,
+          kelas: `Kelas ${kelas} (Fase ${fase})`
+        })}
+        jsonData={{
+          satuanPendidikan,
+          mataPelajaran,
+          kelas,
+          fase,
+          semester,
+          tahunPelajaran,
+          bab,
+          materiPokok,
+          deskripsiCp,
+          tujuanPembelajaranRaw,
+          hasilKktp: kktpResult,
+          tanggalEkspor: new Date().toISOString()
+        }}
+        jsonFilename={`KKTP_PJOK_Kelas_${kelas}_${materiPokok.replace(/\s+/g, '_')}`}
+      />
     </div>
   );
 }

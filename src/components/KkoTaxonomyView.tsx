@@ -20,6 +20,10 @@ import {
   CheckCircle2,
   FileSignature
 } from 'lucide-react';
+import { downloadJsonFile } from '../lib/exportUtils';
+import AiPromptModal from './AiPromptModal';
+import ExportJsonPromptAiButtons from './ExportJsonPromptAiButtons';
+import { getKodeEtikKkoCetakPrompts } from '../utils/aiPromptGenerators';
 
 interface KkoLevel {
   level: string;
@@ -52,6 +56,7 @@ export default function KkoTaxonomyView() {
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   // Full Bloom's KKO Data
   const bloomKkoData: KkoLevel[] = [
@@ -282,9 +287,22 @@ export default function KkoTaxonomyView() {
               Panduan interaktif <strong>Kata Kerja Operasional (KKO)</strong> Kurikulum Merdeka. Telaah klasifikasi kognitif <strong>Taksonomi Bloom (C1-C6)</strong> dan kedalaman respon siswa pada <strong>Taksonomi SOLO</strong>, dilengkapi AI Analyzer TP.
             </p>
           </div>
-          <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-xl border border-white/10 shrink-0 text-center sm:text-left">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-200 block">STANDAR PEDAGOGIS</span>
-            <span className="text-xs font-black text-white block mt-0.5">KKO Taksonomi Terintegrasi</span>
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+            <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-xl border border-white/10 text-center sm:text-left">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-200 block">STANDAR PEDAGOGIS</span>
+              <span className="text-xs font-black text-white block mt-0.5">KKO Taksonomi Terintegrasi</span>
+            </div>
+            <ExportJsonPromptAiButtons
+              onExportJson={() => {
+                const filename = `Tabel_KKO_Taksonomi_Bloom_SOLO.json`;
+                downloadJsonFile(filename, {
+                  taksonomiBloom: bloomKkoData,
+                  taksonomiSolo: soloKkoData,
+                  analisisTerakhir: analysisResult
+                });
+              }}
+              onOpenPromptAi={() => setShowPromptModal(true)}
+            />
           </div>
         </div>
       </div>
@@ -778,6 +796,22 @@ export default function KkoTaxonomyView() {
         </div>
       )}
 
+      {/* MODAL PROMPT AI (GEMINI / CHATGPT) */}
+      <AiPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
+        title="Prompt AI - Taksonomi KKO & Analisis Level TP"
+        subtitle="Rekomendasi Kata Kerja Operasional Bloom (C1-C6) & SOLO Taxonomy PJOK"
+        tabs={getKodeEtikKkoCetakPrompts("Taksonomi KKO Bloom dan SOLO")}
+        defaultActiveTab="prompt_menu"
+        jsonData={{
+          taksonomiBloom: bloomKkoData,
+          taksonomiSolo: soloKkoData,
+          drafTp: draftTp,
+          analisisTerakhir: analysisResult
+        }}
+        jsonFilename="Tabel_KKO_Taksonomi_Bloom_SOLO.json"
+      />
     </div>
   );
 }
