@@ -288,42 +288,150 @@ export function exportModulToDoc(modul: ModulAjar): string {
 /**
  * 2. Exports Capaian Pembelajaran (CP) to Google Docs compatible Word Document
  */
-export function exportCpToDoc(faseName: string, grades: string, elements: any[]): string {
-  const items = elements.map((el, idx) => `
-    <div style="margin-bottom: 15pt; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden;">
-      <div style="background-color: #f1f5f9; padding: 8px 12px; border-bottom: 1px solid #cbd5e1; font-weight: bold; font-size: 11pt; color: #0f172a;">
-        Elemen ${idx + 1}: ${el.name}
+export function exportCpToDoc(
+  faseName: string, 
+  grades: string, 
+  elements: any[],
+  meta?: {
+    capaianUmum?: string;
+    skRegulasi?: string;
+    rasionalFase?: string;
+    namaSekolah?: string;
+    namaGuru?: string;
+    nipGuru?: string;
+    jabatanGuru?: string;
+    kepalaSekolah?: string;
+    nipKepsek?: string;
+    jabatanKepsek?: string;
+    tahunAjaran?: string;
+    tempatPenetapan?: string;
+    tanggalPenetapan?: string;
+    guruSignature?: string;
+    kepsekSignature?: string;
+    showPengawas?: boolean;
+    namaPengawas?: string;
+    nipPengawas?: string;
+    jabatanPengawas?: string;
+    pengawasSignature?: string;
+    showStempel?: boolean;
+    stempelImage?: string;
+  }
+): string {
+  const skReg = meta?.skRegulasi || 'Keputusan Kepala BSKAP Nomor 046/H/KR/2025';
+  const capaianUmum = meta?.capaianUmum || '';
+  const rasional = meta?.rasionalFase || '';
+  const sekolah = meta?.namaSekolah || 'SD NEGERI CONTOH';
+  const guru = meta?.namaGuru || 'Guru PJOK';
+  const nipG = meta?.nipGuru || '-';
+  const jabatanG = meta?.jabatanGuru || 'Guru Mata Pelajaran PJOK';
+  const kepsek = meta?.kepalaSekolah || 'Kepala Sekolah';
+  const nipK = meta?.nipKepsek || '-';
+  const jabatanK = meta?.jabatanKepsek || 'Kepala Sekolah';
+  const thnAjar = meta?.tahunAjaran || '2026/2027';
+  const tglTepat = meta?.tanggalPenetapan || '13 Juli 2026';
+  const tmptTepat = meta?.tempatPenetapan || 'Jakarta';
+
+  const items = elements.map((el, idx) => {
+    const lingkupMateriHtml = Array.isArray(el.lingkupMateri) && el.lingkupMateri.length > 0 
+      ? `<div style="margin-top: 8pt; padding: 8px 10px; background-color: #f8fafc; border-left: 3px solid #059669; font-size: 9.5pt;">
+          <strong style="color: #065f46;">Lingkup Materi Pokok:</strong>
+          <ul style="margin: 4pt 0 0 16pt; padding: 0; color: #334155;">
+            ${el.lingkupMateri.map((m: string) => `<li>${m}</li>`).join('')}
+          </ul>
+        </div>`
+      : '';
+
+    const contohTpHtml = Array.isArray(el.contohTp) && el.contohTp.length > 0
+      ? `<div style="margin-top: 6pt; padding: 8px 10px; background-color: #f0fdf4; border-left: 3px solid #10b981; font-size: 9.5pt;">
+          <strong style="color: #065f46;">Contoh Formulasi Tujuan Pembelajaran (TP) Turunan:</strong>
+          <ol style="margin: 4pt 0 0 16pt; padding: 0; color: #1e293b;">
+            ${el.contohTp.map((t: string) => `<li>${t}</li>`).join('')}
+          </ol>
+        </div>`
+      : '';
+
+    return `
+      <div style="margin-bottom: 16pt; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; page-break-inside: avoid;">
+        <div style="background-color: #f1f5f9; padding: 9px 14px; border-bottom: 1px solid #cbd5e1; font-weight: bold; font-size: 11pt; color: #0f172a; display: flex; justify-content: space-between;">
+          <span>Elemen ${idx + 1}: ${el.name} ${el.alias ? `<span style="font-weight: normal; color: #64748b; font-size: 9.5pt;">(${el.alias})</span>` : ''}</span>
+          ${el.isCustom ? '<span style="color: #059669; font-size: 8.5pt; font-weight: normal; background: #d1fae5; padding: 2px 6px; border-radius: 4px;">Muatan Kustom Sekolah</span>' : ''}
+        </div>
+        <div style="padding: 12px 14px; font-size: 10pt; color: #334155; line-height: 1.6;">
+          <div style="font-weight: 600; color: #1e293b; margin-bottom: 4pt;">Deskripsi Capaian Pembelajaran:</div>
+          <p style="margin: 0; text-align: justify;">${el.description}</p>
+          ${lingkupMateriHtml}
+          ${contohTpHtml}
+        </div>
       </div>
-      <div style="padding: 12px; font-size: 10pt; color: #334155; line-height: 1.6;">
-        ${el.description}
-      </div>
-    </div>
-  `).join('\n');
+    `;
+  }).join('\n');
 
   const content = `
-    <h1>CAPAIAN PEMBELAJARAN (CP) PJOK</h1>
-    <p style="text-align: center; font-size: 10pt; font-weight: bold; color: #475569; margin-top: -4px;">STANDAR NASIONAL &bull; KURIKULUM MERDEKA SD</p>
+    <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 10pt; margin-bottom: 15pt;">
+      <h2 style="margin: 0; font-size: 13pt; text-transform: uppercase; color: #0f172a;">${sekolah}</h2>
+      <h1 style="margin: 4pt 0 0 0; font-size: 14pt; color: #0f172a;">CAPAIAN PEMBELAJARAN (CP) MATA PELAJARAN PJOK</h1>
+      <p style="margin: 3pt 0 0 0; font-size: 9.5pt; font-weight: bold; color: #475569;">KURIKULUM MERDEKA &bull; TAHUN AJARAN ${thnAjar}</p>
+      <p style="margin: 2pt 0 0 0; font-size: 8.5pt; color: #64748b; font-style: italic;">Dasar Hukum: ${skReg}</p>
+    </div>
 
-    <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 6px; margin-bottom: 15pt;">
+    <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 12px 16px; border-radius: 6px; margin-bottom: 14pt;">
       <table style="width: 100%; border-collapse: collapse;">
         <tr>
           <td>
-            <strong style="font-size: 13pt; color: #1e3a8a;">${faseName}</strong><br>
-            <span style="font-size: 9.5pt; color: #475569;">Fokus Tingkatan Kelas: ${grades}</span>
+            <strong style="font-size: 12pt; color: #1e3a8a;">${faseName} &bull; ${grades}</strong><br>
+            <span style="font-size: 9.5pt; color: #475569;">Mata Pelajaran: Pendidikan Jasmani, Olahraga, dan Kesehatan (PJOK)</span>
           </td>
           <td style="text-align: right; vertical-align: middle;">
-            <span class="badge" style="background-color: #3b82f6; color: #ffffff; padding: 4px 8px; font-size: 9pt; border-radius: 4px;">SADAR PJOK</span>
+            <span class="badge" style="background-color: #059669; color: #ffffff; padding: 4px 10px; font-size: 9pt; border-radius: 4px; font-weight: bold;">STANDAR NASIONAL LENGKAP</span>
           </td>
         </tr>
       </table>
     </div>
 
+    ${rasional ? `
+      <div style="margin-bottom: 14pt; padding: 10px 14px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+        <strong style="font-size: 10pt; color: #0f172a; display: block; margin-bottom: 3pt;">Rasional Pembelajaran ${faseName}:</strong>
+        <p style="margin: 0; font-size: 9.5pt; color: #475569; line-height: 1.5; text-align: justify;">${rasional}</p>
+      </div>
+    ` : ''}
+
+    ${capaianUmum ? `
+      <div style="margin-bottom: 16pt; padding: 12px 14px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px;">
+        <strong style="font-size: 10.5pt; color: #065f46; display: block; margin-bottom: 4pt;">Capaian Pembelajaran Umum Akhir ${faseName}:</strong>
+        <p style="margin: 0; font-size: 10pt; color: #064e3b; line-height: 1.6; text-align: justify; font-style: italic;">
+          "${capaianUmum}"
+        </p>
+      </div>
+    ` : ''}
+
     <div style="margin-top: 10pt;">
+      <h3 style="font-size: 11pt; color: #0f172a; border-bottom: 2px solid #cbd5e1; padding-bottom: 4pt; margin-bottom: 12pt;">
+        ELEMEN DAN CAPAIAN PEMBELAJARAN
+      </h3>
       ${items}
+    </div>
+
+    <div style="margin-top: 25pt; page-break-inside: avoid;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 10pt;">
+        <tr>
+          <td style="width: 50%; text-align: center; vertical-align: top;">
+            Mengetahui,<br>
+            Kepala Sekolah<br><br><br><br>
+            <strong style="text-decoration: underline;">${kepsek}</strong><br>
+            NIP. ${nipK}
+          </td>
+          <td style="width: 50%; text-align: center; vertical-align: top;">
+            Ditetapkan di: Sekolah<br>
+            Guru Mata Pelajaran PJOK<br><br><br><br>
+            <strong style="text-decoration: underline;">${guru}</strong><br>
+            NIP. ${nipG}
+          </td>
+        </tr>
+      </table>
     </div>
   `;
 
-  return wrapWithDocShell(`CP_PJOK_${faseName.replace(' ', '_')}`, content);
+  return wrapWithDocShell(`CP_PJOK_${faseName.replace(/\s+/g, '_')}`, content);
 }
 
 /**
@@ -2578,229 +2686,387 @@ export function exportKktpToDoc(kktp: KktpData): string {
 export function exportRpeToDoc(rpe: RpeData): string {
   const bulanRows = rpe.alokasiWaktu.bulans.map((b) => {
     return `
-      <tr>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${b.no}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold;">${b.bulan}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${b.jumlahPekan}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; font-weight: bold; color: #16a34a;">${b.pekanEfektif}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; color: #dc2626;">${b.pekanTidakEfektif}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 9pt; color: #475569;">${b.keterangan || '-'}</td>
+      <tr style="page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${b.no}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-weight: bold; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${b.bulan}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${b.jumlahPekan}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-weight: bold; color: #15803d; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${b.pekanEfektif}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-weight: bold; color: #b91c1c; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${b.pekanTidakEfektif}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-family: Arial, sans-serif; font-size: 9pt; color: #334155; mso-border-alt: solid windowtext 0.5pt;">${b.keterangan || '-'}</td>
       </tr>
     `;
   }).join('\n');
 
   const tidakEfektifRows = rpe.pekanTidakEfektif.map((act) => {
     return `
-      <tr>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${act.no}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold;">${act.uraianKegiatan}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; font-weight: bold;">${act.jumlahPekan}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 9pt; color: #475569;">${act.keterangan || '-'}</td>
+      <tr style="page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${act.no}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-weight: bold; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${act.uraianKegiatan}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-weight: bold; color: #b91c1c; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${act.jumlahPekan}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-family: Arial, sans-serif; font-size: 9pt; color: #334155; mso-border-alt: solid windowtext 0.5pt;">${act.keterangan || '-'}</td>
       </tr>
     `;
   }).join('\n');
 
-  const content = `
-    <h1 style="text-align: center; margin-bottom: 5px;">RINCIAN PEKAN EFEKTIF (RPE)</h1>
-    <p style="text-align: center; font-size: 11pt; font-weight: bold; color: #1e293b; margin-top: 0; margin-bottom: 25px; text-transform: uppercase;">
-      TAHUN PELAJARAN ${rpe.identitas.tahunPelajaran}
-    </p>
+  const distribusiRows = Array.isArray(rpe.distribusiAlokasiWaktu) && rpe.distribusiAlokasiWaktu.length > 0
+    ? rpe.distribusiAlokasiWaktu.map((item) => `
+      <tr style="page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">${item.no}</td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-weight: bold; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">
+          ${item.materiPokok}
+        </td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-family: Arial, sans-serif; font-size: 9pt; color: #475569; mso-border-alt: solid windowtext 0.5pt;">
+          ${item.lingkupMateri || 'Elemen Capaian Pembelajaran'}
+        </td>
+        <td style="border: 1pt solid #000000; padding: 5pt 4pt; text-align: center; font-weight: bold; color: #0f172a; font-family: Arial, sans-serif; font-size: 9.5pt; mso-border-alt: solid windowtext 0.5pt;">
+          ${item.alokasiWaktuJp} JP
+        </td>
+        <td style="border: 1pt solid #000000; padding: 5pt 6pt; font-family: Arial, sans-serif; font-size: 9pt; color: #475569; mso-border-alt: solid windowtext 0.5pt;">
+          ${item.keterangan || '-'}
+        </td>
+      </tr>
+    `).join('\n')
+    : '';
 
-    <div class="info-box">
-      <table class="info-grid">
-        <tr>
-          <td width="50%"><strong>Nama Sekolah:</strong> ${rpe.identitas.namaSekolah}</td>
-          <td width="50%"><strong>Mata Pelajaran:</strong> ${rpe.identitas.mataPelajaran}</td>
-        </tr>
-        <tr>
-          <td><strong>Semester:</strong> Semester ${rpe.identitas.semester}</td>
-          <td><strong>Kelas:</strong> Kelas ${rpe.identitas.kelas}</td>
-        </tr>
-        <tr>
-          <td><strong>JP Per Minggu:</strong> ${rpe.identitas.jpPerMinggu} JP</td>
-          <td><strong>Status Kurikulum:</strong> Kurikulum Merdeka</td>
-        </tr>
-      </table>
+  const totalDistribusiJp = Array.isArray(rpe.distribusiAlokasiWaktu)
+    ? rpe.distribusiAlokasiWaktu.reduce((acc, curr) => acc + (Number(curr.alokasiWaktuJp) || 0), 0)
+    : rpe.totalJamEfektif;
+
+  const kepsekName = rpe.identitas.kepalaSekolah || 'Kepala Sekolah';
+  const kepsekNip = rpe.identitas.nipKepsek || '-';
+  const guruName = rpe.identitas.namaGuru || 'Guru Mata Pelajaran PJOK';
+  const guruNip = rpe.identitas.nipGuru || '-';
+  const kota = rpe.identitas.kota || 'Kota';
+
+  const content = `
+    <!-- HEADER KOP RESMI DOKUMEN -->
+    <div style="text-align: center; border-bottom: 2.5pt double #000000; padding-bottom: 6pt; margin-bottom: 14pt;">
+      <h3 style="margin: 0 0 2pt 0; font-family: Arial, sans-serif; font-size: 11pt; font-weight: bold; text-transform: uppercase; color: #334155; letter-spacing: 0.5pt;">
+        ${rpe.identitas.namaSekolah}
+      </h3>
+      <h1 style="margin: 2pt 0 2pt 0; font-family: Arial, sans-serif; font-size: 15pt; font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 1pt;">
+        RINCIAN PEKAN EFEKTIF (RPE)
+      </h1>
+      <p style="margin: 2pt 0 0 0; font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; color: #000000; text-transform: uppercase;">
+        KURIKULUM MERDEKA &bull; TAHUN PELAJARAN ${rpe.identitas.tahunPelajaran}
+      </p>
     </div>
 
-    <h2 style="font-size: 11pt; color: #0f172a; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid #0f172a; padding-bottom: 3px; text-transform: uppercase;">
-      A. PERHITUNGAN ALOKASI WAKTU
+    <!-- TABEL IDENTITAS SEKOLAH -->
+    <table border="0" cellspacing="0" cellpadding="3" style="width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-family: Arial, sans-serif; font-size: 9.5pt;">
+      <tr>
+        <td style="width: 20%; padding: 3pt 0; font-weight: bold; border: none;">Satuan Pendidikan</td>
+        <td style="width: 30%; padding: 3pt 0; border: none;">: ${rpe.identitas.namaSekolah}</td>
+        <td style="width: 20%; padding: 3pt 0; font-weight: bold; border: none;">Mata Pelajaran</td>
+        <td style="width: 30%; padding: 3pt 0; border: none;">: ${rpe.identitas.mataPelajaran}</td>
+      </tr>
+      <tr>
+        <td style="padding: 3pt 0; font-weight: bold; border: none;">Kelas / Fase</td>
+        <td style="padding: 3pt 0; border: none;">: Kelas ${rpe.identitas.kelas} ${rpe.identitas.fase ? `(${rpe.identitas.fase})` : ''}</td>
+        <td style="padding: 3pt 0; font-weight: bold; border: none;">Semester</td>
+        <td style="padding: 3pt 0; border: none;">: Semester ${rpe.identitas.semester}</td>
+      </tr>
+      <tr>
+        <td style="padding: 3pt 0; font-weight: bold; border: none;">Beban Alokasi Waktu</td>
+        <td style="padding: 3pt 0; border: none;">: ${rpe.identitas.jpPerMinggu} Jam Pelajaran (JP) / Pekan</td>
+        <td style="padding: 3pt 0; font-weight: bold; border: none;">Tahun Pelajaran</td>
+        <td style="padding: 3pt 0; border: none;">: ${rpe.identitas.tahunPelajaran}</td>
+      </tr>
+    </table>
+
+    <!-- I. PERHITUNGAN PEKAN EFEKTIF -->
+    <h2 style="font-family: Arial, sans-serif; font-size: 11pt; color: #000000; font-weight: bold; margin-top: 14pt; margin-bottom: 6pt; border-bottom: 1pt solid #000000; padding-bottom: 2pt; text-transform: uppercase;">
+      I. PERHITUNGAN ALOKASI WAKTU PEKAN EFEKTIF
     </h2>
-    <h3 style="font-size: 10pt; color: #334155; margin-top: 15px; margin-bottom: 8px;">
-      1. Jumlah Pekan dalam Satu Semester
+
+    <h3 style="font-family: Arial, sans-serif; font-size: 10pt; color: #000000; font-weight: bold; margin-top: 10pt; margin-bottom: 4pt;">
+      1. Jumlah Pekan dalam Semester ${rpe.identitas.semester}
     </h3>
     
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+    <table border="1" cellspacing="0" cellpadding="5" bordercolor="#000000" style="width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-family: Arial, sans-serif; font-size: 9.5pt; border: 1pt solid #000000; mso-table-layout-alt: fixed; mso-border-alt: solid windowtext 0.75pt;">
       <thead>
-        <tr style="background-color: #0f172a; color: #ffffff;">
-          <th style="width: 6%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">No</th>
-          <th style="width: 24%; border: 1px solid #cbd5e1; padding: 8px;">Bulan</th>
-          <th style="width: 16%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">Jumlah Pekan</th>
-          <th style="width: 16%; text-align: center; border: 1px solid #cbd5e1; padding: 8px; background-color: #15803d;">Pekan Efektif</th>
-          <th style="width: 16%; text-align: center; border: 1px solid #cbd5e1; padding: 8px; background-color: #b91c1c;">Tidak Efektif</th>
-          <th style="width: 22%; border: 1px solid #cbd5e1; padding: 8px;">Keterangan</th>
+        <tr style="background-color: #f1f5f9; color: #000000; mso-yfti-head: y; display: table-header-group;">
+          <th style="width: 6%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">No</th>
+          <th style="width: 24%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Nama Bulan</th>
+          <th style="width: 16%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Jumlah Pekan</th>
+          <th style="width: 16%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Pekan Efektif</th>
+          <th style="width: 16%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Tidak Efektif</th>
+          <th style="width: 22%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Keterangan Kegiatan</th>
         </tr>
       </thead>
       <tbody>
         ${bulanRows}
-        <tr style="background-color: #f1f5f9; font-weight: bold;">
-          <td colspan="2" style="text-align: center; border: 1px solid #cbd5e1; padding: 10px;">Jumlah</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 10px;">${rpe.alokasiWaktu.totalPekan}</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 10px; color: #15803d;">${rpe.alokasiWaktu.totalPekanEfektif}</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 10px; color: #b91c1c;">${rpe.alokasiWaktu.totalPekanTidakEfektif}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 10px;">-</td>
+        <tr style="background-color: #f8fafc; font-weight: bold; page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+          <td colspan="2" style="text-align: center; border: 1pt solid #000000; padding: 6pt; text-transform: uppercase; mso-border-alt: solid windowtext 0.75pt;">Jumlah Total Pekan</td>
+          <td style="text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; mso-border-alt: solid windowtext 0.75pt;">${rpe.alokasiWaktu.totalPekan}</td>
+          <td style="text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; color: #15803d; mso-border-alt: solid windowtext 0.75pt;">${rpe.alokasiWaktu.totalPekanEfektif}</td>
+          <td style="text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; color: #b91c1c; mso-border-alt: solid windowtext 0.75pt;">${rpe.alokasiWaktu.totalPekanTidakEfektif}</td>
+          <td style="border: 1pt solid #000000; padding: 6pt; mso-border-alt: solid windowtext 0.75pt;">-</td>
         </tr>
       </tbody>
     </table>
 
-    <h3 style="font-size: 10pt; color: #334155; margin-top: 20px; margin-bottom: 8px;">
-      2. Rincian Pekan Tidak Efektif
+    <h3 style="font-family: Arial, sans-serif; font-size: 10pt; color: #000000; font-weight: bold; margin-top: 14pt; margin-bottom: 4pt;">
+      2. Rincian Banyaknya Pekan Tidak Efektif
     </h3>
 
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
+    <table border="1" cellspacing="0" cellpadding="5" bordercolor="#000000" style="width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-family: Arial, sans-serif; font-size: 9.5pt; border: 1pt solid #000000; mso-table-layout-alt: fixed; mso-border-alt: solid windowtext 0.75pt;">
       <thead>
-        <tr style="background-color: #1e293b; color: #ffffff;">
-          <th style="width: 8%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">No</th>
-          <th style="width: 42%; border: 1px solid #cbd5e1; padding: 8px;">Uraian Kegiatan</th>
-          <th style="width: 18%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">Jumlah Pekan</th>
-          <th style="width: 32%; border: 1px solid #cbd5e1; padding: 8px;">Keterangan / Waktu Pelaksanaan</th>
+        <tr style="background-color: #f1f5f9; color: #000000; mso-yfti-head: y; display: table-header-group;">
+          <th style="width: 8%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">No</th>
+          <th style="width: 46%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Uraian Kegiatan / Agenda Sekolah</th>
+          <th style="width: 18%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Jumlah (Pekan)</th>
+          <th style="width: 28%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Keterangan / Waktu Pelaksanaan</th>
         </tr>
       </thead>
       <tbody>
         ${tidakEfektifRows}
-        <tr style="background-color: #f1f5f9; font-weight: bold;">
-          <td colspan="2" style="text-align: center; border: 1px solid #cbd5e1; padding: 10px;">Jumlah Total Pekan Tidak Efektif</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 10px; color: #b91c1c;">${rpe.alokasiWaktu.totalPekanTidakEfektif}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 10px;">Pekan</td>
+        <tr style="background-color: #f8fafc; font-weight: bold; page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+          <td colspan="2" style="text-align: center; border: 1pt solid #000000; padding: 6pt; text-transform: uppercase; mso-border-alt: solid windowtext 0.75pt;">Jumlah Total Pekan Tidak Efektif</td>
+          <td style="text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; color: #b91c1c; mso-border-alt: solid windowtext 0.75pt;">${rpe.alokasiWaktu.totalPekanTidakEfektif}</td>
+          <td style="border: 1pt solid #000000; padding: 6pt; mso-border-alt: solid windowtext 0.75pt;">Pekan</td>
         </tr>
       </tbody>
     </table>
 
-    <h3 style="font-size: 10pt; color: #334155; margin-top: 20px; margin-bottom: 8px;">
-      3. Jumlah Pekan Efektif
+    <h3 style="font-family: Arial, sans-serif; font-size: 10pt; color: #000000; font-weight: bold; margin-top: 14pt; margin-bottom: 4pt;">
+      3. Perhitungan Pekan Efektif & Jam Pelajaran (JP) Efektif
     </h3>
-    <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; margin-bottom: 15px; font-family: monospace; font-size: 10pt; color: #1e293b;">
-      <strong>Rumus:</strong> Jumlah Pekan Efektif = Jumlah Pekan dalam Semester - Jumlah Pekan Tidak Efektif<br/>
-      <strong>Perhitungan:</strong> ${rpe.totalPekanEfektifFormula}
-    </div>
+    <table border="1" cellspacing="0" cellpadding="8" bordercolor="#000000" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-family: Arial, sans-serif; font-size: 9.5pt; background-color: #f8fafc; border: 1pt solid #000000; mso-border-alt: solid windowtext 0.75pt;">
+      <tr style="page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+        <td style="padding: 8pt 12pt; width: 50%; border: 1pt solid #000000; vertical-align: top; mso-border-alt: solid windowtext 0.75pt;">
+          <strong>a. Banyaknya Pekan Efektif:</strong><br/>
+          <span style="font-size: 8.5pt; color: #475569;">Rumus: Total Pekan Semester – Pekan Tidak Efektif</span><br/>
+          <span style="font-size: 11pt; font-weight: bold; color: #15803d; font-family: Arial, monospace;">= ${rpe.totalPekanEfektifFormula}</span>
+        </td>
+        <td style="padding: 8pt 12pt; width: 50%; border: 1pt solid #000000; vertical-align: top; mso-border-alt: solid windowtext 0.75pt;">
+          <strong>b. Jumlah Jam Pelajaran (JP) Efektif:</strong><br/>
+          <span style="font-size: 8.5pt; color: #475569;">Rumus: Pekan Efektif × Beban JP/Pekan</span><br/>
+          <span style="font-size: 11pt; font-weight: bold; color: #0f172a; font-family: Arial, monospace;">= ${rpe.totalJamEfektifFormula}</span>
+        </td>
+      </tr>
+    </table>
 
-    <h3 style="font-size: 10pt; color: #334155; margin-top: 20px; margin-bottom: 8px;">
-      4. Jumlah Jam Pelajaran (JP) Efektif
-    </h3>
-    <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; margin-bottom: 25px; font-family: monospace; font-size: 10pt; color: #1e293b;">
-      <strong>Rumus:</strong> Jumlah Jam Efektif = Jumlah Pekan Efektif x JP Per Pekan<br/>
-      <strong>Perhitungan:</strong> ${rpe.totalJamEfektifFormula}
-    </div>
+    ${distribusiRows ? `
+    <!-- II. DISTRIBUSI ALOKASI WAKTU -->
+    <h2 style="font-family: Arial, sans-serif; font-size: 11pt; color: #000000; font-weight: bold; margin-top: 16pt; margin-bottom: 6pt; border-bottom: 1pt solid #000000; padding-bottom: 2pt; text-transform: uppercase;">
+      II. DISTRIBUSI ALOKASI WAKTU PEMBELAJARAN (MATERI POKOK PJOK)
+    </h2>
+    <table border="1" cellspacing="0" cellpadding="5" bordercolor="#000000" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-family: Arial, sans-serif; font-size: 9.5pt; border: 1pt solid #000000; mso-table-layout-alt: fixed; mso-border-alt: solid windowtext 0.75pt;">
+      <thead>
+        <tr style="background-color: #f1f5f9; color: #000000; mso-yfti-head: y; display: table-header-group;">
+          <th style="width: 6%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">No</th>
+          <th style="width: 44%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Materi Pokok Pembelajaran PJOK</th>
+          <th style="width: 22%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Lingkup Materi / Elemen CP</th>
+          <th style="width: 14%; text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Alokasi Waktu</th>
+          <th style="width: 14%; border: 1pt solid #000000; padding: 6pt 6pt; text-align: left; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${distribusiRows}
+        <tr style="background-color: #f8fafc; font-weight: bold; page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+          <td colspan="3" style="text-align: center; border: 1pt solid #000000; padding: 6pt; text-transform: uppercase; mso-border-alt: solid windowtext 0.75pt;">Total Jam Pembelajaran Didistribusikan</td>
+          <td style="text-align: center; border: 1pt solid #000000; padding: 6pt 4pt; font-weight: bold; mso-border-alt: solid windowtext 0.75pt;">${totalDistribusiJp} JP</td>
+          <td style="border: 1pt solid #000000; padding: 6pt; mso-border-alt: solid windowtext 0.75pt;">Sesuai JP Efektif</td>
+        </tr>
+      </tbody>
+    </table>
+    ` : ''}
 
     ${rpe.catatanAnalisis ? `
-    <h2 style="font-size: 11pt; color: #0f172a; margin-top: 25px; margin-bottom: 10px; border-bottom: 2px solid #0f172a; padding-bottom: 3px; text-transform: uppercase;">
-      B. CATATAN & REKOMENDASI ANALISIS KALENDER
+    <!-- III. CATATAN & REKOMENDASI -->
+    <h2 style="font-family: Arial, sans-serif; font-size: 11pt; color: #000000; font-weight: bold; margin-top: 16pt; margin-bottom: 6pt; border-bottom: 1pt solid #000000; padding-bottom: 2pt; text-transform: uppercase;">
+      III. CATATAN & REKOMENDASI ANALISIS KALENDER
     </h2>
-    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 15px; font-size: 10pt; line-height: 1.6; color: #14532d; margin-bottom: 30px;">
+    <div style="background-color: #f0fdf4; border: 1pt solid #16a34a; padding: 8pt 10pt; font-family: Arial, sans-serif; font-size: 9pt; line-height: 1.5; color: #14532d; margin-bottom: 20pt;">
       ${rpe.catatanAnalisis}
     </div>
     ` : ''}
 
-    <table class="signature-grid" style="width: 100%; border-collapse: collapse; margin-top: 40px;">
-      <tr>
-        <td style="width: 50%; border: none; text-align: center;">
-          <p>Mengetahui,</p>
-          <p><strong>Kepala Sekolah</strong></p>
-          <br><br><br><br>
-          <p>___________________________</p>
-          <p style="font-size: 9pt; color: #64748b;">NIP. _______________________</p>
-        </td>
-        <td style="width: 50%; border: none; text-align: center;">
-          <p>${rpe.tanggalDokumen || 'Jakarta, ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          <p><strong>Guru Mata Pelajaran</strong></p>
-          <br><br><br><br>
-          <p>___________________________</p>
-          <p style="font-size: 9pt; color: #64748b;">NIP. _______________________</p>
-        </td>
-      </tr>
-    </table>
+    <!-- KOLOM PENGESAHAN TANDA TANGAN (BEBAS TERPOTONG HALAMAN) -->
+    <div style="margin-top: 25pt; page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
+      <table border="0" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 9.5pt; border: none;">
+        <tr style="border: none;">
+          <td style="width: 50%; border: none; text-align: center; vertical-align: top; padding: 0 15pt;">
+            Mengetahui,<br/>
+            Kepala Sekolah ${rpe.identitas.namaSekolah}<br/><br/><br/><br/><br/>
+            <strong style="text-decoration: underline; font-size: 10pt;">${kepsekName}</strong><br/>
+            NIP. ${kepsekNip}
+          </td>
+          <td style="width: 50%; border: none; text-align: center; vertical-align: top; padding: 0 15pt;">
+            ${kota}, ${rpe.tanggalDokumen || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br/>
+            Guru Mata Pelajaran PJOK<br/><br/><br/><br/><br/>
+            <strong style="text-decoration: underline; font-size: 10pt;">${guruName}</strong><br/>
+            NIP. ${guruNip}
+          </td>
+        </tr>
+      </table>
+    </div>
   `;
 
-  return wrapWithDocShell(`RPE_${rpe.identitas.mataPelajaran.replace(/\s+/g, '_')}`, content);
+  return wrapWithDocShell(`RPE_${rpe.identitas.mataPelajaran.replace(/\s+/g, '_')}_Kelas${rpe.identitas.kelas}_${rpe.identitas.semester}`, content);
 }
+
 
 /**
  * 12. Exports Program Tahunan (PROTA) to Microsoft Word compatible format
  */
 export function exportProtaToDoc(prota: ProtaData): string {
-  const rowsHtml = prota.rows.map((row) => {
+  const totals = prota.rows.reduce(
+    (acc, row) => {
+      const match = row.alokasiWaktu.match(/(\d+)\s*JP/i) || row.alokasiWaktu.match(/^(\d+)/);
+      const jp = match ? parseInt(match[1], 10) : 0;
+      const sem = row.semester.toLowerCase();
+      if (sem.includes('1') || sem.includes('ganjil') || sem.includes('i')) {
+        acc.smt1 += jp;
+      } else {
+        acc.smt2 += jp;
+      }
+      acc.total += jp;
+      return acc;
+    },
+    { smt1: 0, smt2: 0, total: 0 }
+  );
+
+  const displaySmt1 = prota.totalJpSemester1 ?? totals.smt1;
+  const displaySmt2 = prota.totalJpSemester2 ?? totals.smt2;
+  const displayTahunan = prota.totalJpTahunan ?? totals.total;
+
+  const rowsHtml = prota.rows.map((row, idx) => {
+    const isEven = idx % 2 === 0;
+    const bg = isEven ? '#ffffff' : '#f8fafc';
     return `
-      <tr>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${row.no}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px; font-weight: bold;">${row.bab}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px;">${row.tujuanPembelajaran}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px; font-style: italic;">${row.materi}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; font-weight: bold; color: #1e3a8a;">${row.alokasiWaktu}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${row.semester}</td>
+      <tr style="page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit; background-color: ${bg};">
+        <td style="border: 1pt solid #000000; padding: 6pt; text-align: center; vertical-align: top; font-weight: bold; font-size: 9.5pt;">${row.no}</td>
+        <td style="border: 1pt solid #000000; padding: 6pt; vertical-align: top; font-weight: bold; font-size: 9.5pt; color: #0f172a;">
+          ${row.bab}
+          ${row.elemen ? `<div style="font-size: 8.5pt; font-weight: normal; color: #475569; margin-top: 3pt;"><em>Elemen: ${row.elemen}</em></div>` : ''}
+        </td>
+        <td style="border: 1pt solid #000000; padding: 6pt; vertical-align: top; text-align: justify; font-size: 9.5pt; line-height: 1.35;">${row.tujuanPembelajaran}</td>
+        <td style="border: 1pt solid #000000; padding: 6pt; vertical-align: top; font-size: 9pt; color: #334155;">${row.materi}</td>
+        <td style="border: 1pt solid #000000; padding: 6pt; text-align: center; vertical-align: top; font-weight: bold; font-size: 9.5pt; white-space: nowrap;">${row.alokasiWaktu}</td>
+        <td style="border: 1pt solid #000000; padding: 6pt; text-align: center; vertical-align: top; font-weight: 600; font-size: 9pt; white-space: nowrap;">${row.semester}</td>
+        <td style="border: 1pt solid #000000; padding: 6pt; vertical-align: top; font-size: 8.5pt; color: #475569;">${row.keterangan || '-'}</td>
       </tr>
     `;
   }).join('\n');
 
   const content = `
-    <h1 style="text-align: center; margin-bottom: 5px;">PROGRAM TAHUNAN (PROTA)</h1>
-    <p style="text-align: center; font-size: 11pt; font-weight: bold; color: #1e293b; margin-top: 0; margin-bottom: 25px; text-transform: uppercase;">
-      TAHUN PELAJARAN ${prota.identitas.tahunPelajaran}
-    </p>
-
-    <div class="info-box" style="margin-bottom: 20px; border: 1px solid #94a3b8; border-radius: 6px; padding: 12px; background-color: #f8fafc;">
-      <table class="info-grid" style="width: 100%; border-collapse: collapse; font-size: 10pt;">
-        <tr>
-          <td style="padding: 4px;" width="50%"><strong>Mata Pelajaran:</strong> ${prota.identitas.mataPelajaran}</td>
-          <td style="padding: 4px;" width="50%"><strong>Kelas / Fase:</strong> Kelas ${prota.identitas.kelas} / Fase ${prota.identitas.fase}</td>
-        </tr>
-        <tr>
-          <td style="padding: 4px;"><strong>Total JP 2 Semester:</strong> ${prota.identitas.totalJp2Semester}</td>
-          <td style="padding: 4px;"><strong>Alokasi JP per Minggu:</strong> ${prota.identitas.alokasiWaktuTiapMinggu}</td>
-        </tr>
-        <tr>
-          <td style="padding: 4px;"><strong>Semester 1 (Ganjil):</strong> ${prota.identitas.semester1Weeks} Pekan</td>
-          <td style="padding: 4px;"><strong>Semester 2 (Genap):</strong> ${prota.identitas.semester2Weeks} Pekan</td>
-        </tr>
-      </table>
+    <!-- HEADER RESMI KEMENTERIAN / SEKOLAH -->
+    <div style="text-align: center; margin-bottom: 12pt; border-bottom: 2pt solid #000000; padding-bottom: 8pt;">
+      <h2 style="font-size: 14pt; font-weight: bold; margin: 0 0 4pt 0; text-transform: uppercase; letter-spacing: 0.5pt; font-family: 'Times New Roman', serif;">
+        ${prota.identitas.namaSekolah ? prota.identitas.namaSekolah.toUpperCase() : 'PEMERINTAH DAERAH DINAS PENDIDIKAN'}
+      </h2>
+      <h1 style="font-size: 13pt; font-weight: bold; margin: 0 0 4pt 0; text-transform: uppercase; color: #000000; font-family: 'Times New Roman', serif;">
+        PROGRAM TAHUNAN (PROTA) KURIKULUM MERDEKA
+      </h1>
+      <p style="font-size: 10pt; font-weight: bold; margin: 0; text-transform: uppercase; font-family: 'Times New Roman', serif;">
+        TAHUN PELAJARAN ${prota.identitas.tahunPelajaran}
+      </p>
     </div>
 
-    <table style="width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 25px; font-size: 10pt;">
+    <!-- TABEL IDENTITAS SEKOLAH -->
+    <table border="0" cellspacing="0" cellpadding="3" style="width: 100%; border-collapse: collapse; font-family: 'Times New Roman', serif; font-size: 9.5pt; margin-bottom: 12pt;">
+      <tr>
+        <td style="width: 20%; font-weight: bold; padding: 2pt 4pt;">Satuan Pendidikan</td>
+        <td style="width: 30%; padding: 2pt 4pt;">: ${prota.identitas.namaSekolah || 'SD Negeri 1 Merdeka Belajar'}</td>
+        <td style="width: 22%; font-weight: bold; padding: 2pt 4pt;">Beban Belajar per Pekan</td>
+        <td style="width: 28%; padding: 2pt 4pt;">: ${prota.identitas.alokasiWaktuTiapMinggu || '4 JP / Pekan'}</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Mata Pelajaran</td>
+        <td style="padding: 2pt 4pt;">: ${prota.identitas.mataPelajaran}</td>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Pekan Efektif Smt 1 / 2</td>
+        <td style="padding: 2pt 4pt;">: ${prota.identitas.semester1Weeks || '19'} Pekan / ${prota.identitas.semester2Weeks || '17'} Pekan</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Kelas / Fase</td>
+        <td style="padding: 2pt 4pt;">: Kelas ${prota.identitas.kelas} / Fase ${prota.identitas.fase}</td>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Total Target Alokasi JP</td>
+        <td style="padding: 2pt 4pt;">: <strong>${prota.identitas.totalJp2Semester || displayTahunan + ' JP'}</strong></td>
+      </tr>
+    </table>
+
+    <!-- TABEL UTAMA PROTA SIAP CETAK -->
+    <table border="1" cellspacing="0" cellpadding="5" bordercolor="#000000" style="width: 100%; border-collapse: collapse; font-family: 'Times New Roman', serif; font-size: 9.5pt; margin-bottom: 14pt; border: 1pt solid #000000; mso-table-layout-alt: fixed;">
       <thead>
-        <tr style="background-color: #0f172a; color: #ffffff;">
-          <th style="width: 10%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">No Bab/ATP</th>
-          <th style="width: 20%; border: 1px solid #cbd5e1; padding: 8px;">Bab</th>
-          <th style="width: 35%; border: 1px solid #cbd5e1; padding: 8px;">Tujuan Pembelajaran</th>
-          <th style="width: 15%; border: 1px solid #cbd5e1; padding: 8px;">Materi</th>
-          <th style="width: 10%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">Alokasi Waktu</th>
-          <th style="width: 10%; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">Semester</th>
+        <tr style="background-color: #e2e8f0; font-weight: bold; text-align: center; mso-yfti-row-cant-split: cantSplit;">
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 6%; font-size: 9.5pt;">NO</th>
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 22%; font-size: 9.5pt;">BAB / UNIT & ELEMEN CP</th>
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 34%; font-size: 9.5pt;">TUJUAN PEMBELAJARAN (TP)</th>
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 16%; font-size: 9.5pt;">LINGKUP MATERI</th>
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 7%; font-size: 9.5pt;">ALOKASI WAKTU</th>
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 8%; font-size: 9.5pt;">SEMESTER</th>
+          <th style="border: 1pt solid #000000; padding: 6pt; width: 7%; font-size: 9.5pt;">KET.</th>
         </tr>
       </thead>
       <tbody>
         ${rowsHtml}
+        <!-- BARIS REKAPITULASI TOTAL ALOKASI WAKTU -->
+        <tr style="background-color: #f1f5f9; font-weight: bold; mso-yfti-row-cant-split: cantSplit;">
+          <td colspan="4" style="border: 1pt solid #000000; padding: 6pt; text-align: right; font-size: 9.5pt;">
+            TOTAL ALOKASI WAKTU SEMESTER 1 (GANJIL)
+          </td>
+          <td colspan="3" style="border: 1pt solid #000000; padding: 6pt; text-align: center; font-size: 9.5pt; color: #1e3a8a;">
+            ${displaySmt1} Jam Pelajaran (JP)
+          </td>
+        </tr>
+        <tr style="background-color: #f1f5f9; font-weight: bold; mso-yfti-row-cant-split: cantSplit;">
+          <td colspan="4" style="border: 1pt solid #000000; padding: 6pt; text-align: right; font-size: 9.5pt;">
+            TOTAL ALOKASI WAKTU SEMESTER 2 (GENAP)
+          </td>
+          <td colspan="3" style="border: 1pt solid #000000; padding: 6pt; text-align: center; font-size: 9.5pt; color: #1e3a8a;">
+            ${displaySmt2} Jam Pelajaran (JP)
+          </td>
+        </tr>
+        <tr style="background-color: #cbd5e1; font-weight: bold; mso-yfti-row-cant-split: cantSplit;">
+          <td colspan="4" style="border: 1pt solid #000000; padding: 6pt; text-align: right; font-size: 10pt;">
+            TOTAL ALOKASI WAKTU TAHUNAN (SEMESTER 1 + SEMESTER 2)
+          </td>
+          <td colspan="3" style="border: 1pt solid #000000; padding: 6pt; text-align: center; font-size: 10pt; color: #0f172a;">
+            ${displayTahunan} Jam Pelajaran (JP)
+          </td>
+        </tr>
       </tbody>
     </table>
 
-    <table class="signature-grid" style="width: 100%; border-collapse: collapse; margin-top: 40px; font-size: 10pt;">
+    ${prota.catatan ? `
+    <div style="margin-bottom: 16pt; font-family: 'Times New Roman', serif; font-size: 9pt; color: #334155; font-style: italic;">
+      <strong>Catatan Khusus:</strong> ${prota.catatan}
+    </div>` : ''}
+
+    <!-- TANDA TANGAN PENGESAHAN DOKUMEN -->
+    <table border="0" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin-top: 24pt; font-family: 'Times New Roman', serif; font-size: 10pt; page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
       <tr>
-        <td style="width: 50%; border: none; text-align: center;">
-          <p>Mengetahui,</p>
-          <p><strong>Kepala Sekolah</strong></p>
-          <br><br><br><br>
-          <p>___________________________</p>
-          <p style="font-size: 9pt; color: #64748b;">NIP. _______________________</p>
+        <td style="width: 50%; text-align: center; vertical-align: top; padding: 0 10pt;">
+          <p style="margin: 0;">Mengetahui,</p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Kepala ${prota.identitas.namaSekolah || 'Sekolah Dasar'}</p>
+          <div style="height: 55pt;"></div>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">
+            ${prota.identitas.kepalaSekolah || prota.kepalaSekolah || 'BUDI SANTOSO, S.Pd., M.M.'}
+          </p>
+          <p style="margin: 2pt 0 0 0; font-size: 9pt; color: #000000;">
+            NIP. ${prota.identitas.nipKepsek || '19750812 199903 1 002'}
+          </p>
         </td>
-        <td style="width: 50%; border: none; text-align: center;">
-          <p>${prota.tanggalDokumen || 'Jakarta, ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          <p><strong>Guru Mata Pelajaran</strong></p>
-          <br><br><br><br>
-          <p>___________________________</p>
-          <p style="font-size: 9pt; color: #64748b;">NIP. _______________________</p>
+        <td style="width: 50%; text-align: center; vertical-align: top; padding: 0 10pt;">
+          <p style="margin: 0;">
+            ${prota.identitas.kota || 'Jakarta'}, ${prota.tanggalDokumen || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Guru Mata Pelajaran PJOK</p>
+          <div style="height: 55pt;"></div>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">
+            ${prota.identitas.guruMapel || prota.guruMapel || 'AHMAD FAUZI, S.Pd.'}
+          </p>
+          <p style="margin: 2pt 0 0 0; font-size: 9pt; color: #000000;">
+            NIP. ${prota.identitas.nipGuru || '19880415 201502 1 003'}
+          </p>
         </td>
       </tr>
     </table>
   `;
 
-  return wrapWithDocShell(`PROTA_${prota.identitas.mataPelajaran.replace(/\s+/g, '_')}`, content);
+  return wrapWithLandscapeDocShell(`PROTA_${prota.identitas.mataPelajaran.replace(/\s+/g, '_')}_Kelas${prota.identitas.kelas}`, content);
 }
 
 /**
@@ -2890,23 +3156,35 @@ export function wrapWithLandscapeDocShell(title: string, contentHtml: string): s
  */
 export function exportProsemToDoc(prosem: ProsemData): string {
   function buildSemesterTable(semesterName: string, semesterData: any) {
+    let totalJpSemester = 0;
+    let totalPekanEfektif = 0;
+
+    semesterData.monthsHeader.forEach((m: any) => {
+      totalPekanEfektif += (m.totalWeeks - (m.nonEffectiveWeeks ? m.nonEffectiveWeeks.length : 0));
+    });
+
     const monthsHeaderHtml = semesterData.monthsHeader.map((m: any) => {
-      return `<th colspan="${m.totalWeeks}" style="border: 1px solid #94a3b8; padding: 4px; background-color: #e2e8f0; text-align: center; font-weight: bold;">${m.monthName}</th>`;
+      return `<th colspan="${m.totalWeeks}" style="border: 1pt solid #000000; padding: 4pt; background-color: #e2e8f0; text-align: center; font-weight: bold; font-size: 8.5pt;">${m.monthName.toUpperCase()}</th>`;
     }).join('\n');
 
     const weeksHeaderHtml = semesterData.monthsHeader.map((m: any) => {
       let weekCells = '';
       for (let w = 1; w <= m.totalWeeks; w++) {
-        const isNonEffective = m.nonEffectiveWeeks.includes(w);
+        const isNonEffective = m.nonEffectiveWeeks && m.nonEffectiveWeeks.includes(w);
         const cellStyle = isNonEffective 
-          ? 'border: 1px solid #94a3b8; padding: 4px; background-color: #cbd5e1; text-align: center; font-size: 7.5pt;'
-          : 'border: 1px solid #94a3b8; padding: 4px; background-color: #f1f5f9; text-align: center; font-size: 7.5pt;';
+          ? 'border: 1pt solid #000000; padding: 3pt; background-color: #cbd5e1; text-align: center; font-size: 8pt; font-weight: bold; color: #475569;'
+          : 'border: 1pt solid #000000; padding: 3pt; background-color: #f8fafc; text-align: center; font-size: 8pt; font-weight: bold; color: #0f172a;';
         weekCells += `<th style="${cellStyle}">${w}</th>`;
       }
       return weekCells;
     }).join('\n');
 
-    const rowsHtml = semesterData.rows.map((row: any) => {
+    const rowsHtml = semesterData.rows.map((row: any, rIdx: number) => {
+      const match = row.alokasiWaktu.match(/(\d+)\s*JP/i) || row.alokasiWaktu.match(/^(\d+)/);
+      if (match) {
+        totalJpSemester += parseInt(match[1], 10);
+      }
+
       const weekValueCells = row.months.map((m: any) => {
         const headerMonth = semesterData.monthsHeader.find((h: any) => h.monthName === m.monthName);
         return m.weeks.map((w: any) => {
@@ -2916,100 +3194,157 @@ export function exportProsemToDoc(prosem: ProsemData): string {
           let cellText = w.value || '';
           
           if (isNonEffectiveHeader || !w.isEffective) {
-            cellColor = '#f1f5f9'; // light gray/slate for non-effective column blocks
+            cellColor = '#f1f5f9';
             if (w.value && (w.value.includes('L') || w.value.toLowerCase().includes('libur'))) {
-              cellColor = '#fef08a'; // yellow for holidays
-            } else if (w.value && (w.value.includes('MPLS') || w.value.toLowerCase().includes('asesmen') || w.value.includes('PTS') || w.value.includes('PAS') || w.value.includes('PAT') || w.value.includes('STS') || w.value.includes('SAS'))) {
-              cellColor = '#bfdbfe'; // blue for assessments/MPLS
+              cellColor = '#fef08a'; // yellow
+            } else if (w.value && (w.value.includes('MPLS') || w.value.toLowerCase().includes('asesmen') || w.value.includes('PTS') || w.value.includes('PAS') || w.value.includes('PAT') || w.value.includes('STS') || w.value.includes('SAS') || w.value.includes('SAT'))) {
+              cellColor = '#bfdbfe'; // blue
             }
+          } else if (w.value) {
+            cellColor = '#ecfdf5'; // light emerald for scheduled lesson
           }
           
-          return `<td style="border: 1px solid #94a3b8; padding: 4px; text-align: center; background-color: ${cellColor}; font-weight: bold; min-width: 18px;">${cellText}</td>`;
+          return `<td style="border: 1pt solid #000000; padding: 3pt; text-align: center; background-color: ${cellColor}; font-weight: bold; font-size: 8pt; mso-number-format:'\\@'; min-width: 14pt;">${cellText}</td>`;
         }).join('\n');
       }).join('\n');
 
+      const isEven = rIdx % 2 === 0;
+      const rowBg = isEven ? '#ffffff' : '#fcfcfc';
+
       return `
-        <tr>
-          <td style="border: 1px solid #94a3b8; padding: 4px; text-align: center;">${row.no}</td>
-          <td style="border: 1px solid #94a3b8; padding: 4px; font-weight: bold;">${row.bab}</td>
-          <td style="border: 1px solid #94a3b8; padding: 4px;">${row.topik}</td>
-          <td style="border: 1px solid #94a3b8; padding: 4px; text-align: center;">${row.pertemuanKe}</td>
-          <td style="border: 1px solid #94a3b8; padding: 4px; text-align: center; font-weight: bold; color: #1e3a8a;">${row.alokasiWaktu}</td>
+        <tr style="page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit; background-color: ${rowBg};">
+          <td style="border: 1pt solid #000000; padding: 4pt; text-align: center; font-weight: bold; font-size: 8pt;">${row.no}</td>
+          <td style="border: 1pt solid #000000; padding: 4pt; font-weight: bold; font-size: 8pt; color: #0f172a;">${row.bab}</td>
+          <td style="border: 1pt solid #000000; padding: 4pt; font-size: 8pt; line-height: 1.25;">${row.topik}</td>
+          <td style="border: 1pt solid #000000; padding: 4pt; text-align: center; font-size: 8pt; font-family: monospace;">${row.pertemuanKe}</td>
+          <td style="border: 1pt solid #000000; padding: 4pt; text-align: center; font-weight: bold; color: #1e3a8a; font-size: 8pt; white-space: nowrap;">${row.alokasiWaktu}</td>
           ${weekValueCells}
         </tr>
       `;
     }).join('\n');
 
+    // Total week columns count
+    const totalWeeksCols = semesterData.monthsHeader.reduce((acc: number, m: any) => acc + m.totalWeeks, 0);
+
     return `
-      <h2 style="font-size: 11pt; color: #0f172a; border-left: 4px solid #10b981; padding-left: 6px; margin-top: 15px; margin-bottom: 8px;">PROGRAM SEMESTER - SEMESTER ${semesterName.toUpperCase()}</h2>
-      <table style="width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 25px;">
+      <div style="margin-top: 14pt; margin-bottom: 6pt;">
+        <h3 style="font-size: 11pt; font-weight: bold; color: #0f172a; margin: 0 0 4pt 0; text-transform: uppercase; font-family: 'Times New Roman', serif;">
+          DISTRIBUSI WAKTU SEMESTER ${semesterName.toUpperCase()}
+        </h3>
+      </div>
+      <table border="1" cellspacing="0" cellpadding="3" bordercolor="#000000" style="width: 100%; border-collapse: collapse; font-family: 'Times New Roman', serif; font-size: 8pt; margin-bottom: 16pt; border: 1pt solid #000000; mso-table-layout-alt: fixed;">
         <thead>
-          <tr style="background-color: #1e293b; color: #ffffff;">
-            <th rowspan="2" style="border: 1px solid #94a3b8; padding: 4px; text-align: center; width: 4%;">No</th>
-            <th rowspan="2" style="border: 1px solid #94a3b8; padding: 4px; width: 12%;">Unit / Bab</th>
-            <th rowspan="2" style="border: 1px solid #94a3b8; padding: 4px; width: 22%;">Topik / Konten Pembelajaran</th>
-            <th rowspan="2" style="border: 1px solid #94a3b8; padding: 4px; text-align: center; width: 6%;">Pert. Ke</th>
-            <th rowspan="2" style="border: 1px solid #94a3b8; padding: 4px; text-align: center; width: 6%;">Alokasi</th>
+          <tr style="background-color: #0f172a; color: #ffffff; text-align: center; font-weight: bold; mso-yfti-row-cant-split: cantSplit;">
+            <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt; width: 4%; font-size: 8pt;">NO</th>
+            <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt; width: 14%; font-size: 8pt;">UNIT / BAB</th>
+            <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt; width: 22%; font-size: 8pt;">TOPIK / MATERI PEMBELAJARAN</th>
+            <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt; width: 5%; font-size: 8pt;">PERT.</th>
+            <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt; width: 5%; font-size: 8pt;">ALOKASI</th>
             ${monthsHeaderHtml}
           </tr>
-          <tr>
+          <tr style="mso-yfti-row-cant-split: cantSplit;">
             ${weeksHeaderHtml}
           </tr>
         </thead>
         <tbody>
           ${rowsHtml}
+          <!-- BARIS TOTAL JP SEMESTER -->
+          <tr style="background-color: #e2e8f0; font-weight: bold; mso-yfti-row-cant-split: cantSplit;">
+            <td colspan="4" style="border: 1pt solid #000000; padding: 5pt; text-align: right; font-size: 8.5pt;">
+              TOTAL ALOKASI JAM PELAJARAN (JP) TERJADWAL
+            </td>
+            <td style="border: 1pt solid #000000; padding: 5pt; text-align: center; font-size: 8.5pt; color: #1e3a8a;">
+              ${totalJpSemester} JP
+            </td>
+            <td colspan="${totalWeeksCols}" style="border: 1pt solid #000000; padding: 5pt; text-align: left; font-size: 8pt; color: #334155;">
+              Beban mengajar ${totalPekanEfektif} pekan efektif (Rata-rata ${prosem.identitas.alokasiWaktuTiapMinggu || '4 JP'} per pekan)
+            </td>
+          </tr>
         </tbody>
       </table>
     `;
   }
 
   const content = `
-    <h1 style="text-align: center; margin-bottom: 5px;">PROGRAM SEMESTER (PROSEM)</h1>
-    <p style="text-align: center; font-size: 11pt; font-weight: bold; color: #1e293b; margin-top: 0; margin-bottom: 20px; text-transform: uppercase;">
-      TAHUN PELAJARAN ${prosem.identitas.tahunPelajaran}
-    </p>
-
-    <div class="info-box" style="margin-bottom: 15px; border: 1px solid #94a3b8; border-radius: 6px; padding: 10px; background-color: #f8fafc;">
-      <table class="info-grid" style="width: 100%; border-collapse: collapse; font-size: 9.5pt; border: none;">
-        <tr>
-          <td style="padding: 3px; border: none;" width="50%"><strong>Mata Pelajaran:</strong> ${prosem.identitas.mataPelajaran}</td>
-          <td style="padding: 3px; border: none;" width="50%"><strong>Kelas / Fase:</strong> Kelas ${prosem.identitas.kelas} / Fase ${prosem.identitas.fase}</td>
-        </tr>
-        <tr>
-          <td style="padding: 3px; border: none;"><strong>Alokasi JP per Minggu:</strong> ${prosem.identitas.alokasiWaktuTiapMinggu} JP</td>
-          <td style="padding: 3px; border: none;"><strong>Tahun Pelajaran:</strong> ${prosem.identitas.tahunPelajaran}</td>
-        </tr>
-      </table>
+    <!-- KOP DOKUMEN RESMI -->
+    <div style="text-align: center; margin-bottom: 12pt; border-bottom: 2pt solid #000000; padding-bottom: 6pt;">
+      <h2 style="font-size: 13pt; font-weight: bold; margin: 0 0 3pt 0; text-transform: uppercase; font-family: 'Times New Roman', serif;">
+        ${prosem.identitas.namaSekolah ? prosem.identitas.namaSekolah.toUpperCase() : 'PEMERINTAH DAERAH DINAS PENDIDIKAN'}
+      </h2>
+      <h1 style="font-size: 13pt; font-weight: bold; margin: 0 0 3pt 0; text-transform: uppercase; font-family: 'Times New Roman', serif;">
+        PROGRAM SEMESTER (PROSEM) KURIKULUM MERDEKA
+      </h1>
+      <p style="font-size: 10pt; font-weight: bold; margin: 0; text-transform: uppercase; font-family: 'Times New Roman', serif;">
+        TAHUN PELAJARAN ${prosem.identitas.tahunPelajaran}
+      </p>
     </div>
+
+    <!-- TABEL IDENTITAS -->
+    <table border="0" cellspacing="0" cellpadding="2" style="width: 100%; border-collapse: collapse; font-family: 'Times New Roman', serif; font-size: 9pt; margin-bottom: 10pt;">
+      <tr>
+        <td style="width: 20%; font-weight: bold; padding: 2pt 4pt;">Satuan Pendidikan</td>
+        <td style="width: 30%; padding: 2pt 4pt;">: ${prosem.identitas.namaSekolah || 'SD Negeri 1 Merdeka Belajar'}</td>
+        <td style="width: 22%; font-weight: bold; padding: 2pt 4pt;">Alokasi per Pekan</td>
+        <td style="width: 28%; padding: 2pt 4pt;">: ${prosem.identitas.alokasiWaktuTiapMinggu || '4 JP / Pekan'}</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Mata Pelajaran</td>
+        <td style="padding: 2pt 4pt;">: ${prosem.identitas.mataPelajaran}</td>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Tahun Pelajaran</td>
+        <td style="padding: 2pt 4pt;">: ${prosem.identitas.tahunPelajaran}</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Kelas / Fase</td>
+        <td style="padding: 2pt 4pt;">: Kelas ${prosem.identitas.kelas} / Fase ${prosem.identitas.fase}</td>
+        <td style="font-weight: bold; padding: 2pt 4pt;">Status Kurikulum</td>
+        <td style="padding: 2pt 4pt;">: Kurikulum Merdeka (Keputusan Kepala BSKAP Nomor 046/H/KR/2025)</td>
+      </tr>
+    </table>
 
     ${buildSemesterTable('Ganjil (Semester I)', prosem.ganjil)}
     
-    <div style="page-break-before: always;"></div>
+    <div style="page-break-before: always; mso-break-type: section-break;"></div>
 
     ${buildSemesterTable('Genap (Semester II)', prosem.genap)}
 
-    <div class="keterangan-box" style="margin-top: 15px; border: 1px solid #cbd5e1; padding: 10px; background-color: #f8fafc; font-size: 8.5pt;">
-      <strong>Keterangan & Catatan Agenda Khusus:</strong>
-      <p style="margin: 4px 0 0 0; line-height: 1.4;">${prosem.keterangan || 'Agenda Khusus menyesuaikan Kalender Akademik daerah setempat.'}</p>
+    <!-- KETERANGAN AGENDA -->
+    <div style="margin-top: 12pt; border: 1pt solid #000000; padding: 8pt; background-color: #f8fafc; font-family: 'Times New Roman', serif; font-size: 8.5pt;">
+      <strong>Keterangan Simbol & Catatan Agenda Khusus:</strong>
+      <p style="margin: 4pt 0 0 0; line-height: 1.35; white-space: pre-wrap;">${prosem.keterangan || 'Angka 4 = Alokasi 4 JP pada pekan efektif KBM.\nSTS = Sumatif Tengah Semester.\nSAS / SAT = Sumatif Akhir Semester / Akhir Tahun.\nL = Libur Semester / Libur Hari Besar Nasional.'}</p>
     </div>
 
-    <table class="signature-grid" style="width: 100%; border-collapse: collapse; margin-top: 30px; font-size: 9.5pt; border: none;">
+    <!-- TANDA TANGAN PENGESAHAN DOKUMEN -->
+    <table border="0" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin-top: 24pt; font-family: 'Times New Roman', serif; font-size: 9.5pt; page-break-inside: avoid; mso-yfti-row-cant-split: cantSplit;">
       <tr>
-        <td style="width: 50%; border: none; text-align: center; padding: 5px;">
-          <p style="margin-bottom: 40px;">Mengetahui,<br><strong>Kepala Sekolah</strong></p>
-          <p><strong>${prosem.kepalaSekolah || '___________________________'}</strong></p>
-          <p style="font-size: 8pt; color: #64748b; margin-top: 2px;">NIP. _______________________</p>
+        <td style="width: 50%; text-align: center; vertical-align: top; padding: 0 10pt;">
+          <p style="margin: 0;">Mengetahui,</p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Kepala ${prosem.identitas.namaSekolah || 'Sekolah Dasar'}</p>
+          <div style="height: 50pt;"></div>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">
+            ${prosem.identitas.kepalaSekolah || prosem.kepalaSekolah || 'BUDI SANTOSO, S.Pd., M.M.'}
+          </p>
+          <p style="margin: 2pt 0 0 0; font-size: 8.5pt; color: #000000;">
+            NIP. ${prosem.identitas.nipKepsek || '19750812 199903 1 002'}
+          </p>
         </td>
-        <td style="width: 50%; border: none; text-align: center; padding: 5px;">
-          <p style="margin-bottom: 40px;">${prosem.tanggalDokumen || 'Jakarta, ' + new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br><strong>Guru Mata Pelajaran</strong></p>
-          <p><strong>${prosem.guruMapel || '___________________________'}</strong></p>
-          <p style="font-size: 8pt; color: #64748b; margin-top: 2px;">NIP. _______________________</p>
+        <td style="width: 50%; text-align: center; vertical-align: top; padding: 0 10pt;">
+          <p style="margin: 0;">
+            ${prosem.identitas.kota || 'Jakarta'}, ${prosem.tanggalDokumen || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+          <p style="margin: 2pt 0 0 0; font-weight: bold;">Guru Mata Pelajaran PJOK</p>
+          <div style="height: 50pt;"></div>
+          <p style="margin: 0; font-weight: bold; text-decoration: underline;">
+            ${prosem.identitas.guruMapel || prosem.guruMapel || 'AHMAD FAUZI, S.Pd.'}
+          </p>
+          <p style="margin: 2pt 0 0 0; font-size: 8.5pt; color: #000000;">
+            NIP. ${prosem.identitas.nipGuru || '19880415 201502 1 003'}
+          </p>
         </td>
       </tr>
     </table>
   `;
 
-  return wrapWithLandscapeDocShell(`PROSEM_${prosem.identitas.mataPelajaran.replace(/\s+/g, '_')}`, content);
+  return wrapWithLandscapeDocShell(`PROSEM_${prosem.identitas.mataPelajaran.replace(/\s+/g, '_')}_Kelas${prosem.identitas.kelas}`, content);
 }
 
 /**
@@ -3357,7 +3692,26 @@ export function exportLkpdToDoc(data: InteractiveLkpdData): string {
 /**
  * Exports CP ke TP Formulation Data to Word / Google Docs compatible HTML Document
  */
-export function exportCpToTpToDoc(data: CpToTpResult): string {
+export function exportCpToTpToDoc(
+  data: CpToTpResult,
+  meta?: {
+    namaSekolah?: string;
+    namaGuru?: string;
+    nipGuru?: string;
+    kepalaSekolah?: string;
+    nipKepsek?: string;
+    tahunAjaran?: string;
+    kota?: string;
+  }
+): string {
+  const sekolah = meta?.namaSekolah || 'SD NEGERI CONTOH';
+  const guru = meta?.namaGuru || 'Guru PJOK';
+  const nipG = meta?.nipGuru || '-';
+  const kepsek = meta?.kepalaSekolah || 'Kepala Sekolah';
+  const nipK = meta?.nipKepsek || '-';
+  const thnAjar = meta?.tahunAjaran || '2026/2027';
+  const kota = meta?.kota || 'Tempat';
+
   const tpRowsHtml = data.daftarTp.map((tp, idx) => `
     <tr>
       <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; font-weight: bold; background-color: #f8fafc;">
@@ -3365,12 +3719,13 @@ export function exportCpToTpToDoc(data: CpToTpResult): string {
       </td>
       <td style="border: 1px solid #cbd5e1; padding: 8px;">
         <strong style="color: #0f172a;">${tp.rumusanTp}</strong>
-        <div style="margin-top: 6px; font-size: 9.5pt; color: #475569;">
+        ${Array.isArray(tp.indikatorKetercapaian) && tp.indikatorKetercapaian.length > 0 ? `
+        <div style="margin-top: 6px; font-size: 9pt; color: #475569;">
           <strong>Indikator Ketercapaian (IKTP):</strong>
           <ul style="margin: 4px 0 0 16px; padding: 0;">
             ${tp.indikatorKetercapaian.map(ind => `<li>${ind}</li>`).join('')}
           </ul>
-        </div>
+        </div>` : ''}
       </td>
       <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 9.5pt;">
         <div><strong>KKO:</strong> ${tp.kompetensiKko}</div>
@@ -3378,7 +3733,7 @@ export function exportCpToTpToDoc(data: CpToTpResult): string {
       </td>
       <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 9.5pt; text-align: center;">
         ${tp.targetKelasSemester}
-        <div style="margin-top: 4px; font-size: 8.5pt; color: #10b981; font-weight: bold;">${tp.alokasiWaktu}</div>
+        <div style="margin-top: 4px; font-size: 8.5pt; color: #059669; font-weight: bold;">${tp.alokasiWaktu}</div>
       </td>
       <td style="border: 1px solid #cbd5e1; padding: 8px; font-size: 9.5pt;">
         <div><strong>P3:</strong> ${tp.profilPancasila}</div>
@@ -3388,73 +3743,82 @@ export function exportCpToTpToDoc(data: CpToTpResult): string {
   `).join('');
 
   const content = `
-    <div style="max-width: 800px; margin: 0 auto;">
-      <h1 style="text-align: center; font-size: 16pt; color: #0f172a; margin-bottom: 4px;">
-        FORMULASI PENYUSUNAN CP KE TP (TUJUAN PEMBELAJARAN)
-      </h1>
-      <p style="text-align: center; font-size: 10pt; color: #64748b; margin-top: 0; margin-bottom: 20px;">
-        MATA PELAJARAN PJOK SD - KURIKULUM MERDEKA
-      </p>
+    <div style="max-width: 820px; margin: 0 auto;">
+      <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 8pt; margin-bottom: 14pt;">
+        <h3 style="margin: 0; font-size: 11pt; text-transform: uppercase; color: #475569;">${sekolah}</h3>
+        <h1 style="margin: 4pt 0 0 0; font-size: 14pt; color: #0f172a;">
+          FORMULASI PENYUSUNAN CP KE TUJUAN PEMBELAJARAN (TP)
+        </h1>
+        <p style="margin: 3pt 0 0 0; font-size: 9.5pt; color: #64748b; font-weight: bold;">
+          MATA PELAJARAN PJOK &bull; KURIKULUM MERDEKA &bull; TAHUN AJARAN ${thnAjar}
+        </p>
+      </div>
 
       <!-- IDENTITAS CP -->
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; background-color: #f8fafc; border: 1px solid #e2e8f0;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; background-color: #f8fafc; border: 1px solid #e2e8f0; font-size: 9.5pt;">
         <tr>
-          <td style="padding: 6px 12px; font-size: 10pt; width: 25%;"><strong>Fase / Kelas Target:</strong></td>
-          <td style="padding: 6px 12px; font-size: 10pt;">${data.fase} (${data.kelas || 'Sesuai Fase'})</td>
+          <td style="padding: 6px 12px; width: 25%; font-weight: bold; color: #334155;">Fase / Kelas:</td>
+          <td style="padding: 6px 12px; font-weight: bold; color: #0f172a;">${data.fase} (${data.kelas || 'Sesuai Fase'})</td>
         </tr>
         <tr>
-          <td style="padding: 6px 12px; font-size: 10pt;"><strong>Elemen PJOK:</strong></td>
-          <td style="padding: 6px 12px; font-size: 10pt; font-weight: bold; color: #059669;">${data.elemen}</td>
+          <td style="padding: 6px 12px; font-weight: bold; color: #334155;">Elemen PJOK:</td>
+          <td style="padding: 6px 12px; font-weight: bold; color: #059669;">${data.elemen}</td>
         </tr>
         ${data.materiSpesifik ? `
         <tr>
-          <td style="padding: 6px 12px; font-size: 10pt;"><strong>Topik Spesifik:</strong></td>
-          <td style="padding: 6px 12px; font-size: 10pt;">${data.materiSpesifik}</td>
+          <td style="padding: 6px 12px; font-weight: bold; color: #334155;">Topik / Materi Spesifik:</td>
+          <td style="padding: 6px 12px; color: #1e293b;">${data.materiSpesifik}</td>
         </tr>
         ` : ''}
         <tr>
-          <td style="padding: 6px 12px; font-size: 10pt; vertical-align: top;"><strong>Teks CP Asli:</strong></td>
-          <td style="padding: 6px 12px; font-size: 9.5pt; font-style: italic; color: #334155; line-height: 1.4;">
+          <td style="padding: 6px 12px; vertical-align: top; font-weight: bold; color: #334155;">Teks Capaian Pembelajaran:</td>
+          <td style="padding: 6px 12px; font-style: italic; color: #334155; line-height: 1.5; text-align: justify;">
             "${data.cpAsli}"
           </td>
         </tr>
       </table>
 
       <!-- HASIL DEKONSTRUKSI -->
-      <h2 style="font-size: 12pt; color: #0f172a; border-left: 4px solid #10b981; padding-left: 8px; margin-top: 20px;">
-        1. HASIL DEKONSTRUKSI CP (ANALISIS KOMPETENSI & LINGKUP MATERI)
+      <h2 style="font-size: 11pt; color: #0f172a; border-left: 4px solid #059669; padding-left: 8px; margin-top: 14pt; margin-bottom: 8pt;">
+        1. HASIL DEKONSTRUKSI CP (KOMPETENSI & LINGKUP MATERI)
       </h2>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 9.5pt;">
         <tr style="background-color: #f1f5f9;">
-          <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left; width: 40%;">Kompetensi Utama (KKO)</th>
-          <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left; width: 60%;">Lingkup Materi Utama</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left; width: 45%;">Kompetensi Utama (Kata Kerja Operasional)</th>
+          <th style="border: 1px solid #cbd5e1; padding: 8px; text-align: left; width: 55%;">Lingkup Materi Pokok</th>
         </tr>
         <tr>
           <td style="border: 1px solid #cbd5e1; padding: 8px; vertical-align: top;">
-            <ul style="margin: 0; padding-left: 18px;">
-              ${data.analisisDekonstruksi.kompetensiUtama.map(k => `<li>${k}</li>`).join('')}
+            <ul style="margin: 0; padding-left: 18px; color: #1e293b;">
+              ${(data.analisisDekonstruksi.kompetensiUtama || []).map(k => `<li>${k}</li>`).join('')}
             </ul>
           </td>
           <td style="border: 1px solid #cbd5e1; padding: 8px; vertical-align: top;">
-            <ul style="margin: 0; padding-left: 18px;">
-              ${data.analisisDekonstruksi.lingkupMateriUtama.map(m => `<li>${m}</li>`).join('')}
+            <ul style="margin: 0; padding-left: 18px; color: #1e293b;">
+              ${(data.analisisDekonstruksi.lingkupMateriUtama || []).map(m => `<li>${m}</li>`).join('')}
             </ul>
           </td>
         </tr>
+        ${data.analisisDekonstruksi.variasiKarakteristikSiswa ? `
+        <tr>
+          <td colspan="2" style="border: 1px solid #cbd5e1; padding: 8px; background-color: #f8fafc; color: #475569; font-size: 9pt;">
+            <strong>Catatan Karakteristik Peserta Didik:</strong> ${data.analisisDekonstruksi.variasiKarakteristikSiswa}
+          </td>
+        </tr>` : ''}
       </table>
 
       <!-- DAFTAR RUMUSAN TP -->
-      <h2 style="font-size: 12pt; color: #0f172a; border-left: 4px solid #10b981; padding-left: 8px; margin-top: 20px;">
+      <h2 style="font-size: 11pt; color: #0f172a; border-left: 4px solid #059669; padding-left: 8px; margin-top: 14pt; margin-bottom: 8pt;">
         2. RUMUSAN TUJUAN PEMBELAJARAN (TP) TERSTRUKTUR
       </h2>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 9.5pt;">
         <thead>
           <tr style="background-color: #0f172a; color: #ffffff;">
-            <th style="border: 1px solid #0f172a; padding: 8px; width: 10%;">Kode</th>
-            <th style="border: 1px solid #0f172a; padding: 8px; width: 42%;">Rumusan Tujuan Pembelajaran & Indikator</th>
-            <th style="border: 1px solid #0f172a; padding: 8px; width: 20%;">KKO & Materi</th>
-            <th style="border: 1px solid #0f172a; padding: 8px; width: 13%;">Kelas / Waktu</th>
-            <th style="border: 1px solid #0f172a; padding: 8px; width: 15%;">P3 & Asesmen</th>
+            <th style="border: 1px solid #0f172a; padding: 8px; width: 10%; text-align: center;">Kode</th>
+            <th style="border: 1px solid #0f172a; padding: 8px; width: 42%; text-align: left;">Rumusan Tujuan Pembelajaran (TP) & IKTP</th>
+            <th style="border: 1px solid #0f172a; padding: 8px; width: 20%; text-align: left;">KKO & Materi</th>
+            <th style="border: 1px solid #0f172a; padding: 8px; width: 13%; text-align: center;">Kelas/Waktu</th>
+            <th style="border: 1px solid #0f172a; padding: 8px; width: 15%; text-align: left;">P3 & Asesmen</th>
           </tr>
         </thead>
         <tbody>
@@ -3463,35 +3827,37 @@ export function exportCpToTpToDoc(data: CpToTpResult): string {
       </table>
 
       <!-- CATATAN & STRATEGI PEMBELAJARAN -->
-      <h2 style="font-size: 12pt; color: #0f172a; border-left: 4px solid #10b981; padding-left: 8px; margin-top: 20px;">
+      <h2 style="font-size: 11pt; color: #0f172a; border-left: 4px solid #059669; padding-left: 8px; margin-top: 14pt; margin-bottom: 8pt;">
         3. REKOMENDASI STRATEGI & CATATAN PENDIDIK
       </h2>
-      <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; font-size: 10pt;">
-        <p style="margin-top: 0; margin-bottom: 8px;">
-          <strong>Metode / Pendekatan:</strong> ${data.rekomendasiPendekatan}
+      <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 14px; border-radius: 6px; font-size: 9.5pt;">
+        <p style="margin-top: 0; margin-bottom: 6px;">
+          <strong style="color: #065f46;">Pendekatan / Model Pembelajaran:</strong> ${data.rekomendasiPendekatan}
         </p>
-        <p style="margin: 0;">
-          <strong>Catatan Guru:</strong> ${data.catatanPendidik}
+        <p style="margin: 0; color: #334155;">
+          <strong style="color: #0f172a;">Catatan Pelaksanaan Guru:</strong> ${data.catatanPendidik}
         </p>
       </div>
 
       <!-- LEMBAR TANDA TANGAN -->
-      <table style="width: 100%; border-collapse: collapse; margin-top: 40px; font-size: 10pt;">
-        <tr>
-          <td style="width: 50%; border: none; text-align: center;">
-            Mengetahui,<br/>
-            Kepala Sekolah SD<br/><br/><br/><br/>
-            ___________________________<br/>
-            NIP. .....................................
-          </td>
-          <td style="width: 50%; border: none; text-align: center;">
-            ......................., .................... ${new Date().getFullYear()}<br/>
-            Guru Mata Pelajaran PJOK<br/><br/><br/><br/>
-            ___________________________<br/>
-            NIP. .....................................
-          </td>
-        </tr>
-      </table>
+      <div style="margin-top: 25pt; page-break-inside: avoid;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt;">
+          <tr>
+            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+              Mengetahui,<br/>
+              Kepala Sekolah<br/><br/><br/><br/>
+              <strong style="text-decoration: underline;">${kepsek}</strong><br/>
+              NIP. ${nipK}
+            </td>
+            <td style="width: 50%; border: none; text-align: center; vertical-align: top;">
+              ${kota}, ............................ ${new Date().getFullYear()}<br/>
+              Guru Mata Pelajaran PJOK<br/><br/><br/><br/>
+              <strong style="text-decoration: underline;">${guru}</strong><br/>
+              NIP. ${nipG}
+            </td>
+          </tr>
+        </table>
+      </div>
     </div>
   `;
 

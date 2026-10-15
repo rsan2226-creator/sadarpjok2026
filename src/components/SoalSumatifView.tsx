@@ -1466,7 +1466,7 @@ Kunci: ${q.correctAnswer}
 Rubrik: ${q.pedomanPenskoran}
 `).join('\n') : '(Silakan jalankan atau masukkan butir-butir soal yang ingin ditelaah)';
 
-      return `Bertindaklah sebagai Tim Ahli Reviewer & Validasi Butir Soal Asesmen Puspendik / BSKAP Kemendikbudristek.
+      return `Bertindaklah sebagai Tim Ahli Reviewer & Validasi Butir Soal Asesmen Puspendik / BSKAP (berdasarkan standar Keputusan Kepala BSKAP Nomor 046/H/KR/2025).
 
 TUGAS ANDA:
 Lakukan telaah mutu instrumen (review kualitatif butir soal) terhadap paket asesmen sumatif berikut untuk memastikan evaluasi yang adil, valid, dan reliabel:

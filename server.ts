@@ -124,27 +124,35 @@ function checkAndMarkAccessDenied(error: any) {
   }
 }
 
-// Check Gemini API accessibility once quietly on startup
-(async () => {
-  try {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) return;
-    const testAi = new GoogleGenAI({ apiKey: key });
-    await testAi.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: 'ping'
-    });
-  } catch (err: any) {
-    checkAndMarkAccessDenied(err);
-  }
-})();
+// Track models that have received 429 / RESOURCE_EXHAUSTED so we don't spam them
+const quotaExceededModels = new Map<string, number>();
 
-// Robust retry wrapper to handle 503 (Service Unavailable/High Demand) and 429 (Rate Limit) errors with exponential backoff
-async function callGeminiWithRetry<T>(fn: () => Promise<T>, maxRetries = 4, initialDelayMs = 1500): Promise<T> {
+function isModelRateLimited(modelName: string): boolean {
+  const lastTime = quotaExceededModels.get(modelName);
+  if (!lastTime) return false;
+  // Hold off trying this model for 30 minutes if it returned 429 quota exhaustion
+  if (Date.now() - lastTime < 30 * 60 * 1000) {
+    return true;
+  }
+  quotaExceededModels.delete(modelName);
+  return false;
+}
+
+function markModelRateLimited(modelName: string) {
+  quotaExceededModels.set(modelName, Date.now());
+}
+
+// Fast and resilient retry wrapper with strict timeouts to prevent long-hanging requests
+async function callGeminiWithTimeoutAndRetry<T>(
+  fn: () => Promise<T>,
+  timeoutMs = 8000,
+  maxRetries = 1,
+  initialDelayMs = 600
+): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
-      return await fn();
+      return await queryWithTimeout<T>(fn(), timeoutMs);
     } catch (error: any) {
       attempt++;
       const errorMessage = error?.message || '';
@@ -165,16 +173,17 @@ async function callGeminiWithRetry<T>(fn: () => Promise<T>, maxRetries = 4, init
         errorStr.includes('temporary') || 
         errorStr.includes('429') || 
         errorStr.includes('RESOURCE_EXHAUSTED') ||
+        errorStr.includes('Timeout') ||
         errorMessage.includes('503') ||
         errorMessage.includes('UNAVAILABLE') ||
         errorMessage.includes('high demand') ||
         errorMessage.includes('temporary') ||
         errorMessage.includes('429') ||
-        errorMessage.includes('RESOURCE_EXHAUSTED');
+        errorMessage.includes('RESOURCE_EXHAUSTED') ||
+        errorMessage.includes('Timeout');
 
       if (attempt <= maxRetries && isTransient) {
-        const delay = initialDelayMs * Math.pow(2, attempt - 1) + Math.random() * 800;
-        console.warn(`[Gemini API] Transient error (503/429/Unavailable). Attempt ${attempt}/${maxRetries}. Retrying in ${Math.round(delay)}ms... Error summary: ${errorMessage || 'Unknown Error'}`);
+        const delay = initialDelayMs * Math.pow(2, attempt - 1);
         await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
         throw error;
@@ -220,57 +229,49 @@ function getAiClient(): GoogleGenAI {
       },
     });
 
-    // Intercept generateContent calls to automatically apply the retry logic and seamless model fallbacks
+    // Intercept generateContent calls to automatically apply the timeout, fast retry and seamless model fallbacks
     const originalGenerateContent = rawClient.models.generateContent.bind(rawClient.models);
     rawClient.models.generateContent = async function(params: any) {
-      const originalModel = params?.model;
-      try {
-        return await callGeminiWithRetry(() => originalGenerateContent(params));
-      } catch (error: any) {
-        checkAndMarkAccessDenied(error);
-        let errorStr = '';
-        try {
-          errorStr = error ? (error.message || String(error)) : '';
-          if (error && typeof error === 'object') {
-            errorStr += ' ' + JSON.stringify(error);
-          }
-        } catch (e) {
-          errorStr = String(error);
-        }
+      const requestedModel = params?.model || 'gemini-3.1-flash-lite';
+      // Official models prioritizing high-availability and separate quota pools
+      const allCandidates = [
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
+        'gemini-3.1-pro-preview',
+        'gemini-3.8-flash',
+        requestedModel
+      ].filter((m, i, arr) => arr.indexOf(m) === i);
 
-        const isPermissionDenied =
-          errorStr.includes('403') ||
-          errorStr.includes('PERMISSION_DENIED') ||
-          errorStr.includes('denied access') ||
-          errorStr.includes('Project Access Denied');
-
-        const isQuotaOrTransient =
-          !isPermissionDenied && (
-            errorStr.includes('503') || 
-            errorStr.includes('UNAVAILABLE') || 
-            errorStr.includes('high demand') || 
-            errorStr.includes('temporary') || 
-            errorStr.includes('429') || 
-            errorStr.includes('RESOURCE_EXHAUSTED') ||
-            errorStr.includes('quota') ||
-            errorStr.includes('Quota') ||
-            errorStr.includes('limit')
-          );
-
-        if (isQuotaOrTransient) {
-          const fallbackModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'].filter(m => m !== originalModel);
-          for (const fallbackModel of fallbackModels) {
-            console.warn(`[Gemini API Fallback] '${originalModel}' encountered transient error. Attempting automatic fallback to '${fallbackModel}'...`);
-            try {
-              const fallbackParams = { ...params, model: fallbackModel };
-              return await callGeminiWithRetry(() => originalGenerateContent(fallbackParams));
-            } catch (fallbackErr: any) {
-              checkAndMarkAccessDenied(fallbackErr);
-            }
-          }
-        }
-        throw error;
+      // Prioritize candidates not currently in cooldown
+      let candidateModels = allCandidates.filter((m) => !isModelRateLimited(m));
+      if (candidateModels.length === 0) {
+        // If all were marked, try them anyway as cooldown might be over
+        candidateModels = allCandidates;
       }
+
+      let lastError: any = null;
+      for (const modelToTry of candidateModels) {
+        try {
+          const runParams = { ...params, model: modelToTry };
+          return await callGeminiWithTimeoutAndRetry(
+            () => originalGenerateContent(runParams),
+            8500, // 8.5s timeout per attempt
+            0 // fast fail to next model or offline template
+          );
+        } catch (err: any) {
+          lastError = err;
+          checkAndMarkAccessDenied(err);
+
+          const errStr = String(err?.message || err || '');
+          if (errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota') || errStr.includes('Quota')) {
+            markModelRateLimited(modelToTry);
+            console.info(`[Gemini API] Model '${modelToTry}' kuota penuh (429), beralih ke model berikutnya atau templat kurikulum.`);
+          } else {
+            console.info(`[Gemini API] Model '${modelToTry}' kendala jaringan/timeout, beralih ke model berikutnya.`);
+          }
+        }
+      }
+      throw lastError || new Error('Semua model Gemini mengalami kendala.');
     };
 
     aiClient = rawClient;
@@ -2082,7 +2083,7 @@ app.post('/api/generate-modul', async (req, res) => {
     }
 
     const ai = getAiClient();
-    const prompt = `Buatkan Modul Ajar PJOK SD Kurikulum Merdeka yang lengkap, mendetail, dan profesional dalam Bahasa Indonesia.
+    const prompt = `Buatkan Modul Ajar PJOK SD Kurikulum Merdeka yang lengkap, mendetail, dan profesional dalam Bahasa Indonesia berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 (Standar Capaian Pembelajaran Kurikulum Nasional/Merdeka) dan Permendikdasmen No. 13 Tahun 2025.
 Kelas: ${grade} SD
 Materi Pokok: ${materi}
 Alokasi Waktu: ${alokasiWaktu || '2 x 35 Menit (1 Pertemuan)'}
@@ -2090,10 +2091,10 @@ Alokasi Waktu: ${alokasiWaktu || '2 x 35 Menit (1 Pertemuan)'}
 Modul Ajar harus disesuaikan dengan tingkat perkembangan anak SD kelas ${grade} secara aman dan menyenangkan.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah asisten pakar kurikulum PJOK Sekolah Dasar Kurikulum Merdeka yang premium dan berpengalaman di Indonesia. Anda bertugas menyusun Modul Ajar berkualitas tinggi dengan detail lengkap, bukan sekadar rangkuman. Format output harus selalu dalam bentuk JSON terstruktur sesuai schema yang diminta.`,
+        systemInstruction: `Anda adalah asisten pakar kurikulum PJOK Sekolah Dasar Kurikulum Merdeka berlandaskan Keputusan Kepala BSKAP Nomor 046/H/KR/2025 dan Permendikdasmen No. 13 Tahun 2025 di Indonesia. Anda bertugas menyusun Modul Ajar berkualitas tinggi dengan detail lengkap, bukan sekadar rangkuman. Format output harus selalu dalam bentuk JSON terstruktur sesuai schema yang diminta.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -2188,7 +2189,7 @@ Kategori Olahraga: ${kategori || 'Umum'}
 Berikan 3 indikator penilaian fisik utama dengan kriteria pencapaian (Bagus/Mahir, Cukup/Layak, dan Kurang/Perlu Bimbingan) yang spesifik secara gerakan fisik (bukan sekadar kata umum).`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah pakar penilai atletik & olahraga SD di Indonesia. Susun rubrik penilaian yang sangat objektif dan berbasis gerak motorik anak. Format output harus selalu dalam JSON terstruktur sesuai schema yang diminta.`,
@@ -2258,7 +2259,7 @@ Materi: ${materi}
 Sertakan 4 pilihan jawaban (A, B, C, D), kunci jawaban yang benar, serta penjelasan singkat kenapa jawaban tersebut benar. Pertanyaan harus sesuai dengan kemampuan kognitif anak SD Kelas ${grade}.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah penyusun soal ujian nasional/sekolah dasar PJOK terkemuka di Indonesia. Buat soal kognitif yang menguji pemahaman aturan permainan, manfaat kesehatan, pola hidup sehat, atau dasar gerakan. Format output harus selalu dalam JSON terstruktur sesuai schema yang diminta.`,
@@ -2556,11 +2557,11 @@ Format output wajib berupa JSON terstruktur yang valid sesuai schema berikut. Ja
 
     const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         temperature: 0.8,
-        systemInstruction: `Anda adalah pakar penulisan soal evaluasi standar nasional serta pembuatan instrumen kartu soal Kurikulum Merdeka yang ahli dalam menghasilkan instrumen evaluasi yang akurat, berbobot, bervariasi unik tanpa duplikasi, dan sesuai standar administrasi sekolah di Indonesia dalam format JSON. Pastikan materi, tingkat kesulitan, dan Capaian Pembelajaran (CP) benar-benar sesuai dengan jenjang Kelas ${grade} SD dan terdistribusi secara berimbang ke seluruh materi yang ditentukan.`,
+        systemInstruction: `Anda adalah pakar penulisan soal evaluasi standar nasional serta pembuatan instrumen kartu soal Kurikulum Merdeka yang ahli dalam menghasilkan instrumen evaluasi yang akurat, berbobot, bervariasi unik tanpa duplikasi, dan sesuai standar administrasi sekolah di Indonesia berlandaskan Capaian Pembelajaran Keputusan Kepala BSKAP Nomor 046/H/KR/2025 dalam format JSON. Pastikan materi, tingkat kesulitan, dan Capaian Pembelajaran (CP) benar-benar sesuai dengan jenjang Kelas ${grade} SD dan terdistribusi secara berimbang ke seluruh materi yang ditentukan.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -2746,7 +2747,7 @@ Tugas Anda:
 Sajikan dalam bentuk JSON terstruktur sesuai skema berikut tanpa penjelasan markdown tambahan di luar blok JSON.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah pakar kurikulum dan evaluasi pendidikan yang ahli dalam menganalisis serta merumuskan Alur Tujuan Pembelajaran menggunakan Taksonomi Bloom dan SOLO secara akurat dan berkualitas dalam format JSON.`,
@@ -2862,7 +2863,7 @@ Sajikan dalam bentuk JSON terstruktur sesuai skema respon yang ditentukan.`;
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah pakar penilai kurikulum SD Kurikulum Merdeka yang menyusun soal ujian tulis atau instrumen ujian praktik secara komprehensif dalam format JSON.`,
@@ -2955,10 +2956,10 @@ app.post('/api/generate-atp', async (req, res) => {
     }
 
     const ai = getAiClient();
-    const prompt = `Buatkan Alur Tujuan Pembelajaran (ATP) dan Kriteria Ketercapaian Tujuan Pembelajaran (KKTP) berbasis Capaian Pembelajaran (CP) PJOK SD Kurikulum Merdeka.
+    const prompt = `Buatkan Alur Tujuan Pembelajaran (ATP) dan Kriteria Ketercapaian Tujuan Pembelajaran (KKTP) berbasis Capaian Pembelajaran (CP) PJOK SD Kurikulum Merdeka berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 (Standar Capaian Pembelajaran Terbaru).
 Fase: ${phase}
 Elemen: ${element}
-CP Referensi: "${cpText || 'Gunakan referensi umum Kurikulum Merdeka untuk elemen ini'}"
+CP Referensi: "${cpText || 'Gunakan referensi resmi Keputusan Kepala BSKAP Nomor 046/H/KR/2025 untuk elemen ini'}"
 Materi Spesifik (Opsional): ${materiSpesifik || 'Umum/Disesuaikan'}
 Kondisi Sarana & Prasarana Sekolah (Opsional): ${saranaSpesifik || 'Standar/Halaman Sekolah'}
 
@@ -2968,10 +2969,10 @@ Tugas Anda:
 3. Berikan saran metode/pendekatan pembelajaran PJOK yang menyenangkan dan ramah anak.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah pakar penilai dan perancang kurikulum PJOK Sekolah Dasar Kurikulum Merdeka yang sangat berkompeten di Indonesia. Format output harus selalu dalam JSON terstruktur sesuai schema yang diminta.`,
+        systemInstruction: `Anda adalah pakar penilai dan perancang kurikulum PJOK Sekolah Dasar Kurikulum Merdeka yang sangat berkompeten di Indonesia dan menguasai Keputusan Kepala BSKAP Nomor 046/H/KR/2025. Format output harus selalu dalam JSON terstruktur sesuai schema yang diminta.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -3027,13 +3028,13 @@ app.post('/api/generate-cp-to-tp', async (req, res) => {
     }
 
     const ai = getAiClient();
-    const prompt = `Formulasikan Capaian Pembelajaran (CP) menjadi Tujuan Pembelajaran (TP) terukur untuk mata pelajaran PJOK Sekolah Dasar Kurikulum Merdeka.
+    const prompt = `Formulasikan Capaian Pembelajaran (CP) menjadi Tujuan Pembelajaran (TP) terukur untuk mata pelajaran PJOK Sekolah Dasar Kurikulum Merdeka berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 (Standar Capaian Pembelajaran Kurikulum Nasional/Merdeka Terbaru).
 
 Data Input:
 - Fase: ${fase || 'Fase A / B / C'}
 - Target Kelas: ${kelas || 'Disesuaikan dengan Fase'}
 - Elemen PJOK: ${elemen}
-- Teks Capaian Pembelajaran (CP) Asli: "${cpText || 'Gunakan referensi CP Kurikulum Merdeka PJOK resmi'}"
+- Teks Capaian Pembelajaran (CP) Asli: "${cpText || 'Gunakan referensi CP Kurikulum Merdeka PJOK resmi Keputusan Kepala BSKAP Nomor 046/H/KR/2025'}"
 - Topik / Materi Spesifik (Opsional): ${materiSpesifik || 'Umum (Pola Gerak Dasar & Kebugaran)'}
 - Format Pendekatan: ${pendekatanFormat || 'Standar Kurikulum Merdeka (Kompetensi + Lingkup Materi)'}
 
@@ -3042,7 +3043,7 @@ Tugas Anda:
    - Kompetensi Utama (Kata Kerja Operasional / KKO Bloom-SOLO yang relevan)
    - Lingkup Materi Utama (Content Scope PJOK)
    - Variasi Karakteristik Peserta Didik SD
-2. Formulasikan 3 - 5 Tujuan Pembelajaran (TP) yang logis, sistematis, hirarkis, serta dapat diukur (measurable) dari CP tersebut.
+2. Formulasikan 3 - 5 Tujuan Pembelajaran (TP) yang logis, sistematis, hirarkis, serta dapat diukur (measurable) dari CP tersebut sesuai Keputusan Kepala BSKAP Nomor 046/H/KR/2025.
 3. Untuk setiap TP, berikan:
    - Kode TP (misal: TP 1.1, TP 1.2, dst.)
    - Rumusan TP yang jelas dan berorientasi pada peserta didik
@@ -3056,10 +3057,10 @@ Tugas Anda:
 4. Berikan rekomendasi pendekatan pembelajaran dan catatan bimbingan guru.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah pakar kurikulum PJOK Sekolah Dasar Kurikulum Merdeka yang berpengalaman merumuskan Capaian Pembelajaran (CP) menjadi Tujuan Pembelajaran (TP) yang kontekstual dan berkualitas tinggi. Selalu kembalikan respon berupa JSON sesuai schema yang ditentukan.`,
+        systemInstruction: `Anda adalah pakar kurikulum PJOK Sekolah Dasar Kurikulum Merdeka yang berpengalaman merumuskan Capaian Pembelajaran (CP) berdasarkan Keputusan Kepala BSKAP Nomor 046/H/KR/2025 menjadi Tujuan Pembelajaran (TP) yang kontekstual dan berkualitas tinggi. Selalu kembalikan respon berupa JSON sesuai schema yang ditentukan.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -3182,7 +3183,7 @@ app.post('/api/generate-kktp', async (req, res) => {
     }
 
     const ai = getAiClient();
-    const prompt = `Buatkan deskripsi kriteria ketercapaian tujuan pembelajaran (KKTP) untuk setiap Tujuan Pembelajaran berikut berdasarkan materi, kelas, dan fase:
+    const prompt = `Buatkan deskripsi kriteria ketercapaian tujuan pembelajaran (KKTP) untuk setiap Tujuan Pembelajaran berikut berdasarkan materi, kelas, dan fase sesuai standar Keputusan Kepala BSKAP Nomor 046/H/KR/2025:
 Mata Pelajaran: ${mataPelajaran}
 Satuan Pendidikan: ${satuanPendidikan}
 Kelas/Fase: Kelas ${kelas} / Fase ${fase}
@@ -3190,7 +3191,7 @@ Semester: ${semester}
 Tahun Pelajaran: ${tahunPelajaran}
 Bab: ${bab}
 Materi Pokok: ${materiPokok}
-Deskripsi CP: "${deskripsiCp}"
+Deskripsi CP (BSKAP 046/H/KR/2025): "${deskripsiCp}"
 
 Daftar Tujuan Pembelajaran (TP):
 ${tpList.map((tp, idx) => `${idx + 1}. ${tp}`).join('\n')}
@@ -3205,10 +3206,10 @@ Bagi setiap Tujuan Pembelajaran di atas, rumuskan deskripsi kriteria pencapaian 
 Pastikan deskripsinya relevan secara motorik/pengetahuan olahraga atau keilmuan mapel tersebut, to-the-point, dan tidak terlalu panjang agar respon cepat dan terhindar dari timeout.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah pakar penilai kurikulum sekolah di Indonesia. Buatkan KKTP interval nilai terstruktur dalam format JSON. Setiap deskripsi interval harus menggambarkan kriteria performa siswa secara konkret dan terukur. Jaga agar setiap deskripsi tetap padat dan ringkas (maksimal 1-2 kalimat per deskripsi) agar respons cepat.`,
+        systemInstruction: `Anda adalah pakar penilai kurikulum sekolah di Indonesia berlandaskan Keputusan Kepala BSKAP Nomor 046/H/KR/2025 dan Panduan Pembelajaran & Asesmen (PPA). Buatkan KKTP interval nilai terstruktur dalam format JSON. Setiap deskripsi interval harus menggambarkan kriteria performa siswa secara konkret dan terukur. Jaga agar setiap deskripsi tetap padat dan ringkas (maksimal 1-2 kalimat per deskripsi) agar respons cepat.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -3300,7 +3301,7 @@ app.post('/api/generate-rpe', async (req, res) => {
       ? ['Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
       : ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni'];
 
-    const prompt = `Buatkan Dokumen Rincian Pekan Efektif (RPE) Kurikulum Merdeka untuk:
+    const prompt = `Buatkan Dokumen Rincian Pekan Efektif (RPE) Kurikulum Merdeka berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 dan Kalender Akademik untuk:
 Nama Sekolah: ${namaSekolah}
 Kelas: Kelas ${kelas}
 Mata Pelajaran: ${mataPelajaran}
@@ -3326,15 +3327,15 @@ Tugas Anda:
    - totalPekanEfektifFormula: Formatnya harus seperti "26 Pekan - 6 Pekan = 20 Pekan" (sesuaikan angkanya).
    - totalJamEfektifFormula: Formatnya harus seperti "20 Pekan x 4 JP = 80 JP" (sesuaikan angkanya).
 6. Berikan tanggalDokumen yang sesuai (misal: "Ceria, 13 Juli 2026").
-7. Berikan catatanAnalisis singkat mengenai rincian kalender pendidikan ini.
+7. Berikan catatanAnalisis singkat mengenai rincian kalender pendidikan ini sesuai ketentuan alokasi BSKAP 046/H/KR/2025.
 
 Pastikan data yang Anda hasilkan konsisten dan akurat secara matematis!`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah pakar administrasi kurikulum sekolah Indonesia. Susunlah Rincian Pekan Efektif (RPE) dalam format JSON yang valid dan akurat secara matematis. Pastikan total pekan per bulan sesuai dengan akumulasi total pekan keseluruhan, dan rumus perhitungan jam efektif benar. Berikan deskripsi yang padat, profesional, dan realistis untuk kalender akademik Indonesia tahun pelajaran ${tahunPelajaran}.`,
+        systemInstruction: `Anda adalah pakar administrasi kurikulum sekolah Indonesia yang berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025. Susunlah Rincian Pekan Efektif (RPE) dalam format JSON yang valid dan akurat secara matematis. Pastikan total pekan per bulan sesuai dengan akumulasi total pekan keseluruhan, dan rumus perhitungan jam efektif benar. Berikan deskripsi yang padat, profesional, dan realistis untuk kalender akademik Indonesia tahun pelajaran ${tahunPelajaran}.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -3449,7 +3450,7 @@ app.post('/api/generate-prota', async (req, res) => {
     
     let prompt = '';
     if (rentangProgram === 'semester_1') {
-      prompt = `Buatkan Dokumen Program Semester I (Ganjil) Kurikulum Merdeka (Format Tabel PROTA Ganjil) berdasar parameter berikut:
+      prompt = `Buatkan Dokumen Program Semester I (Ganjil) Kurikulum Merdeka (Format Tabel PROTA Ganjil) berdasar parameter berikut berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 & Permendikdasmen No. 13 Tahun 2025:
 Mata Pelajaran: ${mataPelajaran}
 Kelas: Kelas ${kelas}
 Fase: Fase ${fase}
@@ -3459,10 +3460,10 @@ Alokasi Waktu per Minggu: ${alokasiWaktuTiapMinggu}
 Semester 1 (Ganjil): ${semester1Weeks || '20'} Pekan
 
 Daftar Bab Semester 1:
-${babSemester1 || 'Ditentukan otomatis oleh AI'}
+${babSemester1 || 'Ditentukan otomatis oleh AI sesuai standar BSKAP 046/H/KR/2025'}
 
 Daftar Tujuan Pembelajaran Lengkap (ATP) Semester 1:
-${tujuanPembelajaranRaw || 'Ditentukan otomatis berdasar kurikulum nasional'}
+${tujuanPembelajaranRaw || 'Ditentukan otomatis berdasar Capaian Pembelajaran Keputusan Kepala BSKAP Nomor 046/H/KR/2025'}
 
 Tugas Anda:
 1. Susunlah tabel Program untuk Semester I (Ganjil) dalam format data JSON terstruktur.
@@ -3479,7 +3480,7 @@ Tugas Anda:
 
 Kembalikan hasil dalam format JSON yang valid.`;
     } else if (rentangProgram === 'semester_2') {
-      prompt = `Buatkan Dokumen Program Semester II (Genap) Kurikulum Merdeka (Format Tabel PROTA Genap) berdasar parameter berikut:
+      prompt = `Buatkan Dokumen Program Semester II (Genap) Kurikulum Merdeka (Format Tabel PROTA Genap) berdasar parameter berikut berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 & Permendikdasmen No. 13 Tahun 2025:
 Mata Pelajaran: ${mataPelajaran}
 Kelas: Kelas ${kelas}
 Fase: Fase ${fase}
@@ -3489,10 +3490,10 @@ Alokasi Waktu per Minggu: ${alokasiWaktuTiapMinggu}
 Semester 2 (Genap): ${semester2Weeks || '21'} Pekan
 
 Daftar Bab Semester 2:
-${babSemester2 || 'Ditentukan otomatis oleh AI'}
+${babSemester2 || 'Ditentukan otomatis oleh AI sesuai standar BSKAP 046/H/KR/2025'}
 
 Daftar Tujuan Pembelajaran Lengkap (ATP) Semester 2:
-${tujuanPembelajaranRaw || 'Ditentukan otomatis berdasar kurikulum nasional'}
+${tujuanPembelajaranRaw || 'Ditentukan otomatis berdasar Capaian Pembelajaran Keputusan Kepala BSKAP Nomor 046/H/KR/2025'}
 
 Tugas Anda:
 1. Susunlah tabel Program untuk Semester II (Genap) dalam format data JSON terstruktur.
@@ -3509,7 +3510,7 @@ Tugas Anda:
 
 Kembalikan hasil dalam format JSON yang valid.`;
     } else {
-      prompt = `Buatkan Dokumen Program Tahunan (PROTA) Kurikulum Merdeka berdasar parameter berikut:
+      prompt = `Buatkan Dokumen Program Tahunan (PROTA) Kurikulum Merdeka berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 & Permendikdasmen No. 13 Tahun 2025 berdasar parameter berikut:
 Mata Pelajaran: ${mataPelajaran}
 Kelas: Kelas ${kelas}
 Fase: Fase ${fase}
@@ -3521,13 +3522,13 @@ Semester 2 (Genap): ${semester2Weeks || '21'} Pekan
 
 Daftar Bab & Pembagian Semester:
 - Bab Semester 1:
-${babSemester1 || 'Ditentukan otomatis oleh AI'}
+${babSemester1 || 'Ditentukan otomatis oleh AI sesuai standar BSKAP 046/H/KR/2025'}
 
 - Bab Semester 2:
-${babSemester2 || 'Ditentukan otomatis oleh AI'}
+${babSemester2 || 'Ditentukan otomatis oleh AI sesuai standar BSKAP 046/H/KR/2025'}
 
 Daftar Tujuan Pembelajaran Lengkap (ATP):
-${tujuanPembelajaranRaw || 'Ditentukan otomatis berdasar kurikulum nasional'}
+${tujuanPembelajaranRaw || 'Ditentukan otomatis berdasar Capaian Pembelajaran Keputusan Kepala BSKAP Nomor 046/H/KR/2025'}
 
 Tugas Anda:
 1. Susunlah tabel Program Tahunan (PROTA) dalam format data JSON terstruktur.
@@ -3546,10 +3547,10 @@ Kembalikan hasil dalam format JSON yang valid.`;
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah pakar kurikulum sekolah Indonesia yang menyusun Program Tahunan (PROTA) Kurikulum Merdeka secara rapi dan profesional dalam format JSON. Pastikan seluruh tujuan pembelajaran dipetakan ke bab yang benar dengan alokasi waktu (JP) yang realistis sesuai format mingguan dan total semester.`,
+        systemInstruction: `Anda adalah pakar kurikulum sekolah Indonesia yang menyusun Program Tahunan (PROTA) Kurikulum Merdeka secara rapi dan profesional berlandaskan Keputusan Kepala BSKAP Nomor 046/H/KR/2025 dan Permendikdasmen No. 13 Tahun 2025 dalam format JSON. Pastikan seluruh tujuan pembelajaran dipetakan ke bab yang benar dengan alokasi waktu (JP) yang realistis sesuai format mingguan dan total semester.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -3628,7 +3629,7 @@ app.post('/api/generate-prosem', async (req, res) => {
     const weeklyJp = parseInt(alokasiWaktuTiapMinggu || '4', 10);
 
     const ai = getAiClient();
-    const prompt = `Buatlah Program Semester (PROSEM) lengkap untuk Ganjil (Semester I) dan Genap (Semester II) berdasarkan Program Tahunan (PROTA) berikut:
+    const prompt = `Buatlah Program Semester (PROSEM) lengkap untuk Ganjil (Semester I) dan Genap (Semester II) berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 & Permendikdasmen No. 13 Tahun 2025 berdasarkan Program Tahunan (PROTA) berikut:
 Mata Pelajaran: ${mataPelajaran}
 Kelas: Kelas ${kelas}
 Fase: Fase ${fase}
@@ -3636,7 +3637,7 @@ Tahun Pelajaran: ${tahunPelajaran}
 Alokasi JP per Minggu: ${weeklyJp} JP
 
 Data PROTA Acuan:
-${protaContent || 'Gunakan kurikulum standar nasional jika tidak dilampirkan'}
+${protaContent || 'Gunakan kurikulum standar nasional sesuai Keputusan Kepala BSKAP Nomor 046/H/KR/2025 jika tidak dilampirkan'}
 
 Ketentuan Penting Penjadwalan Pekan Efektif & Tidak Efektif:
 1. Pembagian Pekan per Bulan:
@@ -3665,10 +3666,10 @@ Ketentuan Penting Penjadwalan Pekan Efektif & Tidak Efektif:
 Susunlah struktur data PROSEM secara lengkap untuk semester Ganjil dan Genap sesuai schema JSON berikut.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
-        systemInstruction: `Anda adalah asisten pakar kurikulum sekolah yang menyusun Program Semester (PROSEM) Kurikulum Merdeka secara akurat, konsisten, dan rapi dalam format JSON. Distribusikan JP secara berurutan dan matematis agar jumlah JP per pekan efektif tepat sesuai alokasi mingguan.`,
+        systemInstruction: `Anda adalah asisten pakar kurikulum sekolah yang menyusun Program Semester (PROSEM) Kurikulum Merdeka berlandaskan Keputusan Kepala BSKAP Nomor 046/H/KR/2025 secara akurat, konsisten, dan rapi dalam format JSON. Distribusikan JP secara berurutan dan matematis agar jumlah JP per pekan efektif tepat sesuai alokasi mingguan.`,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -3869,7 +3870,7 @@ Ketentuan Sangat Penting:
 Kembalikan hasil dalam format JSON terstruktur lengkap sesuai schema.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah pakar desain teknologi instruksional dan media pembelajaran interaktif Indonesia yang ahli menyusun rancangan slide presentasi PPT (PowerPoint) kurikulum merdeka dalam format JSON secara kreatif, lengkap, dan berstruktur rapi.`,
@@ -3960,7 +3961,7 @@ app.post('/api/generate-rpm', async (req, res) => {
     const finalAlokasi = alokasiWaktu || `${countPertemuan * 2} × 35 Menit (${countPertemuan} Pertemuan)`;
 
     const ai = getAiClient();
-    const prompt = `Buatkan Perencanaan Pembelajaran Mendalam (RPM) Lengkap (${countPertemuan} Pertemuan) dengan struktur dan Lampiran Lengkap serta LKPD Lengkap untuk setiap pertemuan (Pertemuan 1 sampai Pertemuan ${countPertemuan}) berdasarkan data berikut:
+    const prompt = `Buatkan Perencanaan Pembelajaran Mendalam (RPM) Lengkap (${countPertemuan} Pertemuan) dengan struktur dan Lampiran Lengkap serta LKPD Lengkap untuk setiap pertemuan (Pertemuan 1 sampai Pertemuan ${countPertemuan}) berpedoman pada Keputusan Kepala BSKAP Nomor 046/H/KR/2025 & Pendekatan Deep Learning berdasarkan data berikut:
 Kelas / Fase Capaian: ${kelasFaseFormatted}
 Mata Pelajaran: ${mataPelajaran || 'Matematika'}
 Topik/Materi: ${materi}
@@ -4014,7 +4015,7 @@ Buat LKPD UTUH namun RINGKAS untuk setiap pertemuan (Pertemuan 1 sampai Pertemua
 4. Penutup (penyemangat, catatan guru, checklist)`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah asisten pakar kurikulum Pembelajaran Mendalam (Deep Learning) Kurikulum Merdeka di Indonesia. Tugas Anda adalah menyusun Perencanaan Pembelajaran Mendalam (RPM) berkualitas tinggi secara lengkap untuk ${countPertemuan} pertemuan namun ditulis dengan sangat PADAT, RINGKAS, dan TO-THE-POINT (gunakan bullet-points singkat) untuk memastikan respons cepat dan tidak terjadi network timeout (Failed to fetch). Output wajib dalam format JSON terstruktur.`,
@@ -4802,7 +4803,7 @@ Rancanglah LKPD tersebut secara kreatif dan kembalikan hasilnya dalam format JSO
 
     const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah pakar desain teknologi instruksional dan media pembelajaran interaktif Indonesia yang ahli menyusun rancangan Lembar Kerja Peserta Didik (LKPD) Kurikulum Merdeka yang visual, modern, dan rapi dalam format JSON terstruktur.`,
@@ -4980,7 +4981,7 @@ Rancanglah Cover tersebut secara istimewa dan kembalikan hasilnya dalam format J
 
     const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah pakar desain media cetak dan tata letak dokumen sekolah resmi Kurikulum Merdeka yang ahli merancang cover dokumen pendidikan berkualitas tinggi dalam format JSON terstruktur.`,
@@ -5074,7 +5075,7 @@ Catatan Tambahan: ${notes || 'Tidak ada'}
 Analisislah secara mendalam apakah beban kerja saat ini sudah memenuhi batas minimal 24 JP per pekan untuk tunjangan profesi guru (TPG) / sertifikasi di Indonesia, bagaimana distribusi fisiknya (karena PJOK menguras fisik di lapangan), kelelahan fisik, serta efisiensi beban administrasi. Berikan usulan solusi konkret dan inovatif jika jam mengajar kurang (misal melalui ekuivalensi tugas tambahan Kemendikbudristek seperti Pembina Ekskul, Pembina Pramuka, Koordinator P5, dsb).`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: `Anda adalah asisten pakar analis beban kerja dan manajemen karir guru/kepegawaian sekolah (Kemendikbudristek RI). Anda bertugas menganalisis jam mengajar guru PJOK dengan keahlian khusus tentang beban fisik guru olahraga di lapangan, regulasi Sertifikasi Guru (Permendikbud No 15 Tahun 2018), dan ekuivalensi jam mengajar. Format output harus selalu dalam bentuk JSON terstruktur sesuai schema yang diminta.`,

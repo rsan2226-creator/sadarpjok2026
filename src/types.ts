@@ -61,14 +61,21 @@ export interface RubrikFisik {
 
 export interface CpElement {
   id: string;
-  name: string; // e.g. "Keterampilan Gerak", "Pengetahuan Gerak"
+  name: string; // e.g. "Terampil Bergerak", "Belajar Melalui Gerak"
   description: string; // CP statement
+  alias?: string; // Nama alternatif / sebutan lain (e.g. Keterampilan Gerak)
+  lingkupMateri?: string[]; // Lingkup materi pokok
+  contohTp?: string[]; // Contoh Tujuan Pembelajaran turunan
+  isCustom?: boolean; // Penanda jika elemen ditambahkan secara manual oleh guru
 }
 
 export interface CpFase {
   id: string;
-  phaseName: string; // Fase A, Fase B, Fase C
+  phaseName: string; // Fase A, Fase B, Fase C, Fase D, dst.
   grades: string; // "Kelas 1 - 2", etc.
+  capaianUmum?: string; // Deskripsi Capaian Pembelajaran Umum Akhir Fase
+  skRegulasi?: string; // Dasar regulasi resmi (Keputusan Kepala BSKAP Nomor 046/H/KR/2025)
+  rasionalFase?: string; // Rasional pembelajaran fase
   elements: CpElement[];
 }
 
@@ -167,11 +174,17 @@ export interface ProsemSemesterData {
 
 export interface ProsemData {
   identitas: {
+    namaSekolah?: string;
     mataPelajaran: string;
     kelas: string;
     fase: string;
     tahunPelajaran: string;
     alokasiWaktuTiapMinggu: string;
+    kepalaSekolah?: string;
+    nipKepsek?: string;
+    guruMapel?: string;
+    nipGuru?: string;
+    kota?: string;
   };
   ganjil: ProsemSemesterData;
   genap: ProsemSemesterData;
@@ -184,14 +197,17 @@ export interface ProsemData {
 export interface ProtaRow {
   no: string;
   bab: string;
+  elemen?: string;
   tujuanPembelajaran: string;
   materi: string;
   alokasiWaktu: string;
   semester: string;
+  keterangan?: string;
 }
 
 export interface ProtaData {
   identitas: {
+    namaSekolah?: string;
     mataPelajaran: string;
     kelas: string;
     fase: string;
@@ -200,21 +216,36 @@ export interface ProtaData {
     alokasiWaktuTiapMinggu: string;
     semester1Weeks: string;
     semester2Weeks: string;
+    kepalaSekolah?: string;
+    nipKepsek?: string;
+    guruMapel?: string;
+    nipGuru?: string;
+    kota?: string;
   };
   rows: ProtaRow[];
+  totalJpSemester1?: number;
+  totalJpSemester2?: number;
+  totalJpTahunan?: number;
   tanggalDokumen: string;
   kepalaSekolah?: string;
   guruMapel?: string;
+  catatan?: string;
 }
 
 export interface RpeData {
   identitas: {
     namaSekolah: string;
     kelas: string;
+    fase?: string;
     jpPerMinggu: number;
     mataPelajaran: string;
     semester: string;
     tahunPelajaran: string;
+    kepalaSekolah?: string;
+    nipKepsek?: string;
+    namaGuru?: string;
+    nipGuru?: string;
+    kota?: string;
   };
   alokasiWaktu: {
     bulans: {
@@ -235,9 +266,17 @@ export interface RpeData {
     jumlahPekan: number;
     keterangan: string;
   }[];
+  distribusiAlokasiWaktu?: {
+    no: number;
+    materiPokok: string;
+    lingkupMateri?: string;
+    alokasiWaktuJp: number;
+    keterangan?: string;
+  }[];
   totalPekanEfektifFormula: string;
   totalJamEfektifFormula: string;
   totalJamEfektif: number;
+  totalJamCadangan?: number;
   tanggalDokumen: string;
   catatanAnalisis?: string;
 }
